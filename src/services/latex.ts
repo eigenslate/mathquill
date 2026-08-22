@@ -43,17 +43,49 @@ var latexMathParser = (function () {
     return new VanillaSymbol(c);
   });
 
+  /**
+   * Resolve a parsed control sequence to its LatexCmds entry.
+   *
+   * The parser strips the backslash off a NON-alphabetic control sequence, so
+   * `\,` and a bare `,` arrive here with the same name. They must be able to
+   * mean different things (a typed comma stays a comma; `\,` is a thin space),
+   * so an escaped sequence gets first refusal on a backslash-prefixed key —
+   * `LatexCmds['\\,']` — and only falls back to the bare key when there is no
+   * escaped-specific entry (which is every pre-existing command: `\&`, `\%`,
+   * `\{`, …). Alphabetic names (`\frac`) are unambiguous and never prefixed.
+   *
+   * @param ctrlSeq The control-sequence name, backslash already consumed.
+   * @param escaped Whether the source actually carried a leading backslash.
+   * @returns The LatexCmds entry, or undefined when unknown.
+   */
+  function lookUpCtrlSeq(ctrlSeq: string, escaped: boolean) {
+    var cmds = LatexCmds as LatexCmdsSingleChar;
+    if (escaped) {
+      var escapedKlass = cmds['\\' + ctrlSeq];
+      if (escapedKlass) return escapedKlass;
+    }
+    return cmds[ctrlSeq];
+  }
+
   var controlSequence = regex(/^[^\\a-eg-zA-Z]/) // hotfix #164; match MathBlock::write
+    .map(function (c) {
+      return { name: c, escaped: false };
+    })
     .or(
-      string('\\').then(
-        regex(/^[a-z]+/i)
-          .or(regex(/^\s+/).result(' '))
-          .or(any)
-      )
+      string('\\')
+        .then(
+          regex(/^[a-z]+/i)
+            .or(regex(/^\s+/).result(' '))
+            .or(any)
+        )
+        .map(function (c) {
+          return { name: c, escaped: true };
+        })
     )
-    .then(function (ctrlSeq) {
+    .then(function (seq) {
       // TODO - is Parser<MQNode> correct?
-      var cmdKlass = (LatexCmds as LatexCmdsSingleChar)[ctrlSeq];
+      var ctrlSeq = seq.name;
+      var cmdKlass = lookUpCtrlSeq(ctrlSeq, seq.escaped);
 
       if (cmdKlass) {
         if (cmdKlass.constructor) {

@@ -173,6 +173,19 @@ suite('latex', function () {
     assertParsesLatex('\\space\\   \\   space  ', '\\ \\ \\ space');
   });
 
+  test('explicit spaces \\, \\: \\; \\!', function () {
+    assertParsesLatex('\\,', '\\, ');
+    assertParsesLatex('\\:', '\\: ');
+    assertParsesLatex('\\;', '\\; ');
+    assertParsesLatex('\\!', '\\! ');
+    assertParsesLatex('5\\,\\text{m}', '5\\, \\text{m}');
+    // The escaped spellings must NOT capture the bare characters: they share
+    // a control-sequence name once the parser strips the backslash.
+    assertParsesLatex('a,b', 'a,b');
+    assertParsesLatex('a;b', 'a;b');
+    assertParsesLatex('a!b', 'a!b');
+  });
+
   test('\\text', function () {
     assertParsesLatex('\\text { lol! } ', '\\text{ lol! }');
     assertParsesLatex(

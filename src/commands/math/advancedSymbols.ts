@@ -215,16 +215,51 @@ LatexCmds.quad = LatexCmds.emsp = bindVanillaSymbol(
   '4 spaces'
 );
 LatexCmds.qquad = bindVanillaSymbol('\\qquad ', '        ', '8 spaces');
-/* spacing special characters, gonna have to implement this in LatexCommandInput::onText somehow
-case ',':
-  return VanillaSymbol('\\, ',' ', 'comma');
-case ':':
-  return VanillaSymbol('\\: ','  ', 'colon');
-case ';':
-  return VanillaSymbol('\\; ','   ', 'semicolon');
-case '!':
-  return MQSymbol('\\! ','<span style="margin-right:-.2em"></span>', 'exclamation point');
-*/
+
+/**
+ * Build one of TeX's explicit horizontal spaces: an empty inline-block whose
+ * CSS `style` supplies the width, so the gap survives HTML whitespace
+ * collapsing (a run of literal spaces in a text node would not).
+ *
+ * @param ctrlSeq The LaTeX control sequence, e.g. `'\\, '` — also what
+ *   `latex()` serializes back out.
+ * @param style Inline CSS carrying the width (or a negative margin for `\!`).
+ * @param mathspeak Screen-reader name.
+ * @returns A LatexCmds builder producing the space symbol.
+ */
+function bindSpace(ctrlSeq: string, style: string, mathspeak: string) {
+  return () => new MQSymbol(ctrlSeq, h('span', { style }), ' ', mathspeak);
+}
+
+// TeX's explicit spaces, at TeX's widths: thin 3/18em, medium 4/18em,
+// thick 5/18em, and `\!` the negative thin space.
+//
+// ⚠ These are keyed under their ESCAPED spelling (`'\\,'`, not `','`). The
+// LaTeX parser strips the backslash off a non-alphabetic control sequence,
+// so `\,` and a bare `,` would otherwise collide on one LatexCmds entry —
+// and a typed comma must stay a comma. `controlSequence` in
+// services/latex.ts looks up the backslash-prefixed key first for exactly
+// this case.
+LatexCmds['\\,'] = bindSpace(
+  '\\, ',
+  'display:inline-block;width:0.1667em',
+  'thin space'
+);
+LatexCmds['\\:'] = bindSpace(
+  '\\: ',
+  'display:inline-block;width:0.2222em',
+  'medium space'
+);
+LatexCmds['\\;'] = bindSpace(
+  '\\; ',
+  'display:inline-block;width:0.2778em',
+  'thick space'
+);
+LatexCmds['\\!'] = bindSpace(
+  '\\! ',
+  'display:inline-block;margin-right:-0.1667em',
+  'negative thin space'
+);
 
 //binary operators
 LatexCmds.diamond = bindVanillaSymbol('\\diamond ', '&#9671;', 'diamond');
