@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const ts = require('typescript');
+const esbuild = require('esbuild');
 
 const SRC_DIR = './src';
 const BUILD_DIR = './build';
@@ -103,6 +104,59 @@ function bundle(files, escapeNonAscii) {
   return result.outputText.replace(/\{VERSION\}/g, 'v0.10.1-matrix');
 }
 
+// The MPL notice the readable bundle carries in its `/** … */` banner, kept on
+// the minified artifacts as a one-line legal comment: MPL-2.0 requires the
+// notice to travel with the form, and a `/*! */` comment is the form that
+// survives every minifier (esbuild's `legalComments: 'inline'` default) without
+// reintroducing a doc-comment banner.
+const LEGAL_BANNER =
+  '/*! MathQuill v0.10.1-matrix | MPL-2.0 | http://mozilla.org/MPL/2.0/ */\n';
+
+/**
+ * Format a byte count for the build log.
+ * @param {number} n - Number of bytes.
+ * @returns {string} The size in whole kilobytes, e.g. '182KB'.
+ */
+function kb(n) {
+  return `${(n / 1024).toFixed(0)}KB`;
+}
+
+/**
+ * Write the minified twin of a built bundle (spec/obfuscation.md §3). Identifier
+ * mangling + whitespace ONLY — property mangling is off, because the MathQuill
+ * public API (`MQ.MathField`, `.latex()`, config keys, `LatexCmds` entries) is
+ * all property names crossing into the app.
+ *
+ * The whole bundle is one IIFE, so every declaration in it is function-scoped
+ * and mangleable; nothing is exposed except through `window.MathQuill`.
+ *
+ * @param {string} name - Bundle basename without extension, e.g. 'mathquill'.
+ * @returns {void} Writes `build/<name>.min.js` and logs the size delta.
+ */
+function writeMinified(name) {
+  const srcPath = path.join(BUILD_DIR, `${name}.js`);
+  const outPath = path.join(BUILD_DIR, `${name}.min.js`);
+  const source = fs.readFileSync(srcPath, 'utf8');
+
+  // `target: es5` is a syntax-level assertion, not a downlevel step: the input
+  // is already ES5 (ts.transpileModule above), so this only stops esbuild from
+  // emitting newer syntax in its own rewrites. `charset` defaults to ascii,
+  // which preserves the escape-non-ASCII property of the readable build.
+  const result = esbuild.transformSync(source, {
+    loader: 'js',
+    minify: true,
+    target: 'es5',
+    legalComments: 'none',
+  });
+
+  fs.writeFileSync(outPath, LEGAL_BANNER + result.code);
+  console.log(
+    `Built ${name}.min.js (${kb(source.length)} → ${kb(
+      LEGAL_BANNER.length + result.code.length
+    )})`
+  );
+}
+
 fs.writeFileSync(
   path.join(BUILD_DIR, 'mathquill.js'),
   bundle(SOURCES_FULL, true)
@@ -114,6 +168,12 @@ fs.writeFileSync(
   bundle(SOURCES_BASIC, true)
 );
 console.log('Built mathquill-basic.js');
+
+// Minified twins of the two shipped bundles. The readable builds stay exactly
+// as they were — test/unit.html, matrix-test.html and every debugging flow read
+// them; only the vendored copy in the app is minified (spec/obfuscation.md §3).
+writeMinified('mathquill');
+writeMinified('mathquill-basic');
 
 // Test bundle: the full sources with the test support + unit suites spliced in
 // before the outro, so test/unit.html works without `make` (unavailable on
