@@ -107,10 +107,13 @@ suite('matrix', function () {
     });
   });
 
-  suite('nesting guard', function () {
+  // The editor is deliberately permissive about nesting: it parses, renders
+  // and creates nested matrices. The calc engine is the only thing that
+  // rejects them, and it does so at evaluation with its own error.
+  suite('nested matrices', function () {
     /**
      * Count the \begin{...} environments in a latex string — one per matrix,
-     * so 1 means nothing nested.
+     * so 2 means one matrix nested inside another.
      */
     function countMatrices(latex) {
       return (latex.match(/\\begin\{/g) || []).length;
@@ -118,7 +121,7 @@ suite('matrix', function () {
 
     /**
      * Render a 2x2 matrix and leave the cursor at the right end of cell (0,0),
-     * i.e. inside the matrix, where interactive creation must be refused.
+     * i.e. inside the matrix, where a nested matrix would be created.
      */
     function cursorInsideCell() {
       mq.latex('\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}');
@@ -128,68 +131,40 @@ suite('matrix', function () {
       return matrix;
     }
 
-    test('.cmd() inside a matrix cell does not nest a matrix', function () {
+    test('.cmd() inside a matrix cell nests a matrix', function () {
       cursorInsideCell();
-      var before = mq.latex();
 
       mq.cmd('\\pmatrix');
 
-      assert.equal(countMatrices(mq.latex()), 1, 'still exactly one matrix');
-      assert.equal(mq.latex(), before, 'cell contents untouched');
-      assert.equal(
-        controller.aria.msg,
-        "You can't put a matrix inside a matrix",
-        'refusal was voiced'
-      );
-    });
-
-    test('.cmd() outside a matrix still creates one', function () {
-      mq.latex('');
-      mq.cmd('\\pmatrix');
       assert.equal(
         countMatrices(mq.latex()),
-        1,
-        'guard does not block ordinary creation'
+        2,
+        'inner matrix created, got ' + mq.latex()
       );
     });
 
-    // The autocommand route eats the letters that triggered it BEFORE the
-    // command is created, so a refused insert would have destroyed them and
-    // put nothing in their place.
-    test('typing the "pmat" autocommand inside a cell keeps the letters', function () {
+    // The autocommand route consumes the typed trigger letters and inserts the
+    // command in their place, inside a cell as anywhere else.
+    test('typing the "pmat" autocommand inside a cell nests a matrix', function () {
       mq.config({ autoCommands: 'pmat' });
       cursorInsideCell();
 
       mq.typedText('pmat');
 
       var latex = mq.latex();
-      assert.equal(countMatrices(latex), 1, 'still exactly one matrix');
-      assert.ok(
-        latex.indexOf('1pmat') > -1,
-        'typed letters survive in the cell, got ' + latex
+      assert.equal(
+        countMatrices(latex),
+        2,
+        'inner matrix created, got ' + latex
       );
+      // Don't search for a leftover 'pmat' — it is a substring of
+      // '\begin{pmatrix}'. The '1' the cursor sat after is what must survive.
+      assert.ok(latex.indexOf('1\\begin{pmatrix}') > -1, 'got ' + latex);
     });
 
-    test('typing the "pmat" autocommand outside a matrix still creates one', function () {
-      mq.config({ autoCommands: 'pmat' });
-      mq.latex('');
-
-      mq.typedText('pmat');
-
-      var latex = mq.latex();
-      assert.equal(countMatrices(latex), 1, 'matrix created');
-      // The trigger letters are consumed, so the new matrix is empty. (Don't
-      // search for 'pmat' — it is a substring of '\begin{pmatrix}'.)
-      var contents = latex
-        .replace(/\\begin\{pmatrix\}|\\end\{pmatrix\}/g, '')
-        .trim();
-      assert.equal(contents, '', 'trigger letters consumed, got ' + latex);
-    });
-
-    // Regression pin: only INTERACTIVE creation is guarded. Nested-matrix
-    // latex from a saved document or a paste must keep parsing and rendering,
-    // or saved content would silently vanish.
-    test('nested-matrix latex still parses and round-trips', function () {
+    // Regression pin: nested-matrix latex from a saved document or a paste
+    // must keep parsing and rendering, or saved content would silently vanish.
+    test('nested-matrix latex parses and round-trips', function () {
       var nested =
         '\\begin{pmatrix}\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}&5\\\\6&7\\end{pmatrix}';
       mq.latex(nested);
