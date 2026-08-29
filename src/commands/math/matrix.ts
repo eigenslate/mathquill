@@ -235,7 +235,53 @@ class Matrix extends MathCommand {
     this.ctrlSeq = config.ctrlSeq;
   }
 
+  /**
+   * True when `cursor` sits anywhere inside a matrix cell, at any depth (a
+   * cell containing a fraction containing the cursor still counts). Walks up
+   * the ancestor chain the same way `finalizeTree` does.
+   * @param cursor position to test
+   * @returns true if some ancestor of the cursor's position is a Matrix
+   */
+  static isInsideMatrix(cursor: Cursor): boolean {
+    let node: MQNode | undefined = cursor.parent;
+    while (node) {
+      if (node instanceof MatrixCell || node instanceof Matrix) return true;
+      node = node.parent;
+    }
+    return false;
+  }
+
+  /**
+   * Matrices may not be created INTERACTIVELY inside another matrix's cell.
+   * Only creation is blocked: the LaTeX parse path never goes through here, so
+   * saved or pasted nested-matrix latex still parses and renders.
+   * @param cursor position the matrix would be created to the left of
+   * @returns true when the cursor is inside a matrix cell
+   */
+  refusesInsertionAt(cursor: Cursor): boolean {
+    return Matrix.isInsideMatrix(cursor);
+  }
+
   createLeftOf(cursor: Cursor) {
+    // Refuse to nest. Silently dropping the insert (as BeginCommand does)
+    // would leave a screen-reader user with no feedback at all, so say why.
+    if (this.refusesInsertionAt(cursor)) {
+      // `replaces()` already disowned any selection this matrix was going to
+      // wrap. With the insert dropped, nothing would ever re-adopt it, so put
+      // it back where it came from — its DOM never moved.
+      const orphaned = this.replacedFragment;
+      if (orphaned) {
+        orphaned.adopt(
+          cursor.parent,
+          cursor[L] as NodeRef,
+          cursor[R] as NodeRef
+        );
+        this.replacedFragment = undefined;
+      }
+      cursor.controller.aria.alert("You can't put a matrix inside a matrix");
+      return;
+    }
+
     this.showCommas = cursor.options.matrixCommaSeparators ?? true;
     super.createLeftOf(cursor);
   }
@@ -753,6 +799,11 @@ class BeginCommand extends MathCommand {
         }
         return Parser.fail('Unknown environment: ' + envName);
       });
+  }
+
+  // \begin is never insertable, at any position - it's only for parsing.
+  refusesInsertionAt(_cursor: Cursor) {
+    return true;
   }
 
   // Prevent \begin from being typed - it's only for parsing

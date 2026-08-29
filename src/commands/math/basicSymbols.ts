@@ -377,12 +377,6 @@ class Letter extends Variable {
       // check for an autocommand, going thru substrings longest to shortest
       while (str.length) {
         if (autoCmds.hasOwnProperty(str)) {
-          l = this;
-          for (i = 1; l && i < str.length; i += 1, l = l[L]);
-
-          new Fragment(l, this).remove();
-          cursor[L] = (l as MQNode)[L];
-
           var cmd = LatexCmds[str];
           var node;
           if (isMQNodeClass(cmd)) {
@@ -390,6 +384,21 @@ class Letter extends Variable {
           } else {
             node = cmd(str);
           }
+
+          // Build the node BEFORE eating the letters, so a node that refuses
+          // to be created here (a matrix inside a matrix cell) leaves the
+          // typed letters standing as ordinary letters instead of destroying
+          // them and putting nothing in their place. createLeftOf is a no-op
+          // in that case, but still voices the refusal.
+          if (node.refusesInsertionAt(cursor)) {
+            return node.createLeftOf(cursor);
+          }
+
+          l = this;
+          for (i = 1; l && i < str.length; i += 1, l = l[L]);
+
+          new Fragment(l, this).remove();
+          cursor[L] = (l as MQNode)[L];
 
           return node.createLeftOf(cursor);
         }

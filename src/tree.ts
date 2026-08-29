@@ -196,6 +196,20 @@ class NodeBase {
     this.createDir(L, cursor);
   }
 
+  /**
+   * Whether this node declines to be inserted at the cursor's position, i.e.
+   * whether `createLeftOf` will deliberately do nothing there (a Matrix inside
+   * a matrix cell). Callers that CONSUME user input to build the node must ask
+   * BEFORE consuming it — `Letter.checkAutoCmds` eats the typed letters that
+   * triggered the autocommand, so without this the input is destroyed and
+   * nothing is created in its place.
+   * @param _cursor the position the node would be created to the left of
+   * @returns true if `createLeftOf` at this position is a no-op
+   */
+  refusesInsertionAt(_cursor: Cursor): boolean {
+    return false;
+  }
+
   selectChildren(leftEnd: MQNode, rightEnd: MQNode) {
     return new MQSelection(leftEnd, rightEnd);
   }

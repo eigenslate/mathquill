@@ -106,4 +106,110 @@ suite('matrix', function () {
       assert.ok(reflows() > 0, 'deleteColumn bubbled a reflow');
     });
   });
+
+  suite('nesting guard', function () {
+    /**
+     * Count the \begin{...} environments in a latex string — one per matrix,
+     * so 1 means nothing nested.
+     */
+    function countMatrices(latex) {
+      return (latex.match(/\\begin\{/g) || []).length;
+    }
+
+    /**
+     * Render a 2x2 matrix and leave the cursor at the right end of cell (0,0),
+     * i.e. inside the matrix, where interactive creation must be refused.
+     */
+    function cursorInsideCell() {
+      mq.latex('\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}');
+      var matrix = findMatrix();
+      assert.ok(matrix, 'matrix rendered');
+      controller.cursor.insAtRightEnd(matrix.cells[0][0]);
+      return matrix;
+    }
+
+    test('.cmd() inside a matrix cell does not nest a matrix', function () {
+      cursorInsideCell();
+      var before = mq.latex();
+
+      mq.cmd('\\pmatrix');
+
+      assert.equal(countMatrices(mq.latex()), 1, 'still exactly one matrix');
+      assert.equal(mq.latex(), before, 'cell contents untouched');
+      assert.equal(
+        controller.aria.msg,
+        "You can't put a matrix inside a matrix",
+        'refusal was voiced'
+      );
+    });
+
+    test('.cmd() outside a matrix still creates one', function () {
+      mq.latex('');
+      mq.cmd('\\pmatrix');
+      assert.equal(
+        countMatrices(mq.latex()),
+        1,
+        'guard does not block ordinary creation'
+      );
+    });
+
+    // The autocommand route eats the letters that triggered it BEFORE the
+    // command is created, so a refused insert would have destroyed them and
+    // put nothing in their place.
+    test('typing the "pmat" autocommand inside a cell keeps the letters', function () {
+      mq.config({ autoCommands: 'pmat' });
+      cursorInsideCell();
+
+      mq.typedText('pmat');
+
+      var latex = mq.latex();
+      assert.equal(countMatrices(latex), 1, 'still exactly one matrix');
+      assert.ok(
+        latex.indexOf('1pmat') > -1,
+        'typed letters survive in the cell, got ' + latex
+      );
+    });
+
+    test('typing the "pmat" autocommand outside a matrix still creates one', function () {
+      mq.config({ autoCommands: 'pmat' });
+      mq.latex('');
+
+      mq.typedText('pmat');
+
+      var latex = mq.latex();
+      assert.equal(countMatrices(latex), 1, 'matrix created');
+      // The trigger letters are consumed, so the new matrix is empty. (Don't
+      // search for 'pmat' — it is a substring of '\begin{pmatrix}'.)
+      var contents = latex
+        .replace(/\\begin\{pmatrix\}|\\end\{pmatrix\}/g, '')
+        .trim();
+      assert.equal(contents, '', 'trigger letters consumed, got ' + latex);
+    });
+
+    // Regression pin: only INTERACTIVE creation is guarded. Nested-matrix
+    // latex from a saved document or a paste must keep parsing and rendering,
+    // or saved content would silently vanish.
+    test('nested-matrix latex still parses and round-trips', function () {
+      var nested =
+        '\\begin{pmatrix}\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}&5\\\\6&7\\end{pmatrix}';
+      mq.latex(nested);
+
+      var latex = mq.latex();
+      assert.equal(
+        countMatrices(latex),
+        2,
+        'inner matrix parsed, got ' + latex
+      );
+      assert.equal(
+        latex,
+        '\\begin{pmatrix}\\begin{pmatrix}1 & 2 \\\\ 3 & 4\\end{pmatrix} & 5 \\\\ 6 & 7\\end{pmatrix}',
+        'serializes with the nesting intact'
+      );
+
+      // Re-parsing what it serialized must be stable, since that is what a
+      // saved document round-trip actually does.
+      mq.latex(latex);
+      assert.equal(mq.latex(), latex, 'round-trips unchanged');
+    });
+  });
 });
