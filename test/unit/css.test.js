@@ -156,4 +156,72 @@ suite('CSS', function () {
 
     $(mq.el()).empty();
   });
+
+  suite('type scale', function () {
+    /**
+     * Renders `latex` as a StaticMath in #mock and returns the computed
+     * font-size in px of the root block and of every `.mq-supsub` /
+     * `.mq-fraction` inside it, in document order.
+     *
+     * @param {string} latex expression to render
+     * @returns {{root: number, supsubs: number[], fractions: number[]}}
+     */
+    function scaleOf(latex) {
+      var mq = MQ.StaticMath(
+        $('<span>' + latex + '</span>').appendTo('#mock')[0]
+      );
+      var el = mq.el();
+      /**
+       * @param {Element} node
+       * @returns {number} computed font-size in px
+       */
+      function px(node) {
+        return parseFloat(window.getComputedStyle(node).fontSize);
+      }
+      /**
+       * @param {string} sel CSS selector to collect sizes for
+       * @returns {number[]} computed font-sizes in document order
+       */
+      function sizes(sel) {
+        return Array.prototype.map.call(el.querySelectorAll(sel), px);
+      }
+      return {
+        root: px(el.querySelector('.mq-root-block')),
+        supsubs: sizes('.mq-supsub'),
+        fractions: sizes('.mq-fraction'),
+      };
+    }
+
+    test('a script shrinks once and a top-level fraction is untouched', function () {
+      // Plain `x^2` and a plain fraction must keep the 90% shrink; the two
+      // capping rules below must not reach them.
+      var sup = scaleOf('x^2');
+      assert.equal(Math.round((sup.supsubs[0] / sup.root) * 1000), 900);
+
+      var frac = scaleOf('\\frac{a}{b}');
+      assert.equal(Math.round((frac.fractions[0] / frac.root) * 1000), 900);
+    });
+
+    test('a fraction inside a script is not re-shrunk', function () {
+      var s = scaleOf('x^{\\frac{a}{b}}');
+      assert.equal(s.supsubs.length, 1);
+      assert.equal(s.fractions.length, 1);
+      // The script's own 90% is the only shrink the fraction gets.
+      assert.equal(Math.round((s.supsubs[0] / s.root) * 1000), 900);
+      assert.equal(s.fractions[0], s.supsubs[0]);
+    });
+
+    test('nested scripts floor at the first level', function () {
+      var s = scaleOf('x^{y^{z}}');
+      assert.equal(s.supsubs.length, 2);
+      assert.equal(Math.round((s.supsubs[0] / s.root) * 1000), 900);
+      assert.equal(s.supsubs[1], s.supsubs[0]);
+
+      // Three deep is still the first level's size.
+      var deep = scaleOf('a^{b^{c^{d}}}');
+      assert.equal(deep.supsubs.length, 3);
+      assert.equal(deep.supsubs[1], deep.supsubs[0]);
+      assert.equal(deep.supsubs[2], deep.supsubs[0]);
+    });
+  });
 });

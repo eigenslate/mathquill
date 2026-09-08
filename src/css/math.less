@@ -234,10 +234,20 @@
       padding: 0 .1em;
     }
 
-    // special styles for fractions
-    // within sup/sub.
+    // Type scale (see CLAUDE.md "Type scale"). Both `.mq-supsub` and
+    // `.mq-fraction` shrink by a percentage of their parent, so nesting
+    // multiplies and deep structures shrink away to nothing. Two rules cap
+    // that: a fraction inside a script is NOT re-shrunk (the script's own 90%
+    // is the only shrink it gets), and nested scripts floor at the first
+    // level. Plain `x^2` and a top-level fraction are untouched. The
+    // vertical-align constants above and on `.mq-fraction` are in `em`, so
+    // they scale with the sizes these rules produce and need no re-tuning.
     .mq-fraction {
-      font-size: 70%;
+      font-size: 100%;
+    }
+
+    .mq-supsub {
+      font-size: 100%;
     }
   }
 
