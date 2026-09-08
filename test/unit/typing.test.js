@@ -1586,6 +1586,18 @@ suite('typing with auto-replaces', function () {
       assert.equal(mq.typedText('x^ab').latex(), 'x^{ab}');
       assert.equal(mq.keystroke('Left').typedText('+').latex(), 'x^{a+b}');
       mq.latex('');
+
+      // Subscripts break out exactly like superscripts — the test is on the
+      // script block, not on which kind of script it is.
+      assert.equal(mq.typedText('x_2n+y').latex(), 'x_{2n}+y');
+      mq.latex('');
+      assert.equal(mq.typedText('x_2n=y').latex(), 'x_{2n}=y');
+      mq.latex('');
+      assert.equal(mq.typedText('x_-2n').latex(), 'x_{-2n}');
+      mq.latex('');
+      assert.equal(mq.typedText('x_ab').latex(), 'x_{ab}');
+      assert.equal(mq.keystroke('Left').typedText('+').latex(), 'x_{a+b}');
+      mq.latex('');
     });
     test('supSubsRequireOperand', function () {
       assert.equal(mq.typedText('^').latex(), '^{ }');

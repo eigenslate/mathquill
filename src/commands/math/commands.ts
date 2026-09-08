@@ -421,9 +421,45 @@ class SupSub extends MathCommand {
       }
     }
   }
+  /**
+   * Installs the script block's `write` handler, layering two typing
+   * behaviours on top of `MathBlock.prototype.write`.
+   *
+   * The ORDER of the two is a deliberate divergence from upstream: the
+   * `charsThatBreakOutOfSupSub` test runs FIRST, so a break-out character
+   * typed at the right end of a script leaves the script even when
+   * `autoSubscriptNumerals` is on. Upstream ran the auto-subscript branch
+   * first, and that branch returns early for every subscript, so `=` (an
+   * `MQSymbol`) stayed inside — `x2=` produced `x_{2=}`. See CLAUDE.md
+   * "SupSub typing" and app `spec/ux.md` §5.1.
+   *
+   * Takes no arguments and returns nothing; its effect is the patched
+   * `write` method on this SupSub's left-end block.
+   */
   finalizeTree() {
     var endsL = this.getEnd(L);
     endsL.write = function (cursor: Cursor, ch: string) {
+      // 1. Break out of the script. Upstream's exemptions are kept verbatim
+      //    and apply to sub and sup alike: never on the script's first
+      //    character (`cursor[L]` must exist, so `x^-1` is still writable),
+      //    only with the caret at the script's right end (`!cursor[R]`), and
+      //    never while a selection is live. Once the caret is outside, write
+      //    at the enclosing level and return — the auto-subscript branch
+      //    below would otherwise still match a subscript block.
+      if (
+        cursor[L] &&
+        !cursor[R] &&
+        !cursor.selection &&
+        cursor.options.charsThatBreakOutOfSupSub.indexOf(ch) > -1
+      ) {
+        cursor.insRightOf(this.parent);
+        cursor.controller.aria.queue('Baseline');
+        MathBlock.prototype.write.call(this, cursor, ch);
+        return;
+      }
+      // 2. Auto-subscript numerals: inside a subscript, anything that is not a
+      //    plain symbol (a fraction, say) ejects the cursor to the enclosing
+      //    level before being created.
       if (
         cursor.options.autoSubscriptNumerals &&
         this === (this.parent as SupSub).sub
@@ -437,15 +473,6 @@ class SupSub extends MathCommand {
           .queue('Baseline')
           .alert(cmd.mathspeak({ createdLeftOf: cursor }));
         return;
-      }
-      if (
-        cursor[L] &&
-        !cursor[R] &&
-        !cursor.selection &&
-        cursor.options.charsThatBreakOutOfSupSub.indexOf(ch) > -1
-      ) {
-        cursor.insRightOf(this.parent);
-        cursor.controller.aria.queue('Baseline');
       }
       MathBlock.prototype.write.call(this, cursor, ch);
     };
