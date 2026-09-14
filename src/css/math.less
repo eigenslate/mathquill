@@ -419,16 +419,23 @@
     vertical-align: top;
   }
 
-  // Adjust table position when delimiters are present
+  // Make room for the delimiters, per side: `matrix` has neither, `cases` has
+  // only a left brace, so each margin is dropped independently.
   .mq-matrix > .mq-matrix-table {
     margin-left: 0.42em;
     margin-right: 0.42em;
   }
-
-  // For matrix without delimiters
-  .mq-matrix:not(:has(.mq-matrix-delim)) > .mq-matrix-table {
+  .mq-matrix:not(:has(.mq-matrix-delim-left)) > .mq-matrix-table {
     margin-left: 0;
+  }
+  .mq-matrix:not(:has(.mq-matrix-delim-right)) > .mq-matrix-table {
     margin-right: 0;
+  }
+
+  // Piecewise block (`cases`): a stack of single free rows, read left to
+  // right like text, so they align on the left edge next to the brace.
+  .mq-matrix-cases .mq-matrix-cell {
+    text-align: left;
   }
 
   ////

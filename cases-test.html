@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>MathQuill Cases Test</title>
+    <link rel="stylesheet" href="build/mathquill.css" />
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          sans-serif;
+        max-width: 800px;
+        margin: 40px auto;
+        padding: 20px;
+        background: #f5f5f5;
+      }
+      .editor {
+        background: white;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px 0;
+        min-height: 60px;
+        font-size: 24px;
+      }
+      .editor:focus-within {
+        border-color: #4a90d9;
+        box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.2);
+      }
+      .info {
+        background: #e8f4fd;
+        border-left: 4px solid #4a90d9;
+        padding: 15px;
+        margin: 20px 0;
+      }
+      .latex-output {
+        background: #f8f8f8;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 10px;
+        font-family: monospace;
+        margin: 10px 0;
+        word-break: break-all;
+      }
+      kbd {
+        background: #eee;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        padding: 2px 6px;
+        font-size: 0.9em;
+      }
+      button {
+        background: #4a90d9;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-right: 10px;
+      }
+      textarea {
+        width: 100%;
+        font-family: monospace;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin-bottom: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>MathQuill Cases Test</h1>
+
+    <div class="info">
+      <ul>
+        <li>
+          Type <kbd>cases</kbd> (or <kbd>\cases</kbd> then <kbd>Enter</kbd>) to
+          insert a two-row piecewise block; <kbd>mat</kbd> / <kbd>pmat</kbd>
+          still insert matrices for comparison.
+        </li>
+        <li>
+          Write each case as <kbd>condition: value</kbd>; the default case has
+          no condition.
+        </li>
+        <li>
+          <kbd>Enter</kbd> adds a row, <kbd>Up</kbd>/<kbd>Down</kbd>/<kbd
+            >Tab</kbd
+          >
+          move between rows.
+        </li>
+        <li>
+          <kbd>Backspace</kbd> in an empty row removes it (the last empty row
+          removes the block); at the start of a non-empty row it moves up.
+        </li>
+        <li>
+          <kbd>,</kbd> types a literal comma; <kbd>Ctrl</kbd>+<kbd>,</kbd> does
+          nothing.
+        </li>
+      </ul>
+    </div>
+
+    <div id="mathfield" class="editor"></div>
+
+    <h3>LaTeX Output:</h3>
+    <div id="latex" class="latex-output"></div>
+
+    <div>
+      <button onclick="loadExample()">Load example</button>
+      <button onclick="mathField.latex(''); mathField.focus()">Clear</button>
+    </div>
+
+    <h3>Parse custom LaTeX</h3>
+    <textarea id="latex-input" rows="3">
+\begin{cases} x>0: x^2 \\ x=0: 0 \\ -x \end{cases}</textarea
+    >
+    <div>
+      <button onclick="parseLatex()">Parse LaTeX</button>
+    </div>
+
+    <script src="build/mathquill.js"></script>
+    <script>
+      var MQ = MathQuill.getInterface(3);
+
+      var mathField = MQ.MathField(document.getElementById('mathfield'), {
+        autoCommands: 'cases mat pmat bmat sqrt frac',
+        autoOperatorNames: 'sin cos tan log ln exp',
+        charsThatBreakOutOfSupSub: '+-=<>',
+        handlers: {
+          edit: function () {
+            document.getElementById('latex').textContent = mathField.latex();
+          },
+        },
+      });
+
+      /** Load a three-case example into the field. */
+      function loadExample() {
+        mathField.latex(
+          'f(x)=\\begin{cases}x>0: x^{2} \\\\ x=0: 0 \\\\ -x\\end{cases}'
+        );
+        document.getElementById('latex').textContent = mathField.latex();
+        mathField.focus();
+      }
+
+      /** Parse whatever is in the textarea into the field. */
+      function parseLatex() {
+        mathField.latex(document.getElementById('latex-input').value.trim());
+        document.getElementById('latex').textContent = mathField.latex();
+        mathField.focus();
+      }
+
+      loadExample();
+    </script>
+  </body>
+</html>

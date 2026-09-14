@@ -10,6 +10,10 @@
  * - Backspace on empty cell in top row: delete column
  * - Backspace on empty cell in first column: delete row
  * - Backspace on empty cell otherwise: move to cell on left
+ *
+ * \begin{cases} (piecewise) is a single-column environment built on the same
+ * grid: one free row per case, a left brace only, and the row-only keystroke
+ * rules in MatrixCell.keystrokeSingleColumn.
  *********************************************/
 
 // Build a stroked, non-scaling-stroke SVG delimiter for a matrix (round
@@ -35,18 +39,81 @@ type MatrixEnvironment =
   | 'bmatrix'
   | 'Bmatrix'
   | 'vmatrix'
-  | 'Vmatrix';
+  | 'Vmatrix'
+  | 'cases';
 
-const MATRIX_CONFIGS: Record<
-  MatrixEnvironment,
-  { leftDelim: string; rightDelim: string; ctrlSeq: string }
-> = {
-  matrix: { leftDelim: '', rightDelim: '', ctrlSeq: '\\begin{matrix}' },
-  pmatrix: { leftDelim: '(', rightDelim: ')', ctrlSeq: '\\begin{pmatrix}' },
-  bmatrix: { leftDelim: '[', rightDelim: ']', ctrlSeq: '\\begin{bmatrix}' },
-  Bmatrix: { leftDelim: '{', rightDelim: '}', ctrlSeq: '\\begin{Bmatrix}' },
-  vmatrix: { leftDelim: '|', rightDelim: '|', ctrlSeq: '\\begin{vmatrix}' },
-  Vmatrix: { leftDelim: '\\|', rightDelim: '\\|', ctrlSeq: '\\begin{Vmatrix}' },
+/**
+ * Per-environment shape of a matrix-like grid.
+ *
+ * `singleColumn` environments (`cases`) are a stack of ROWS with no column
+ * structure: there is exactly one cell per row, column operations are
+ * refused, `,` types a literal comma, cells are left-aligned, no comma
+ * separators are drawn, and `&` is never a separator when parsing (a bare
+ * `&` in a row is kept as a literal ampersand symbol, serialised `\&`, rather
+ * than splitting the row, so pasted two-column `cases` latex degrades visibly
+ * instead of throwing). `extraClass` is added to the `.mq-matrix` element so
+ * the environment can be styled.
+ */
+interface MatrixEnvConfig {
+  leftDelim: string;
+  rightDelim: string;
+  ctrlSeq: string;
+  singleColumn: boolean;
+  extraClass: string;
+}
+
+const MATRIX_CONFIGS: Record<MatrixEnvironment, MatrixEnvConfig> = {
+  matrix: {
+    leftDelim: '',
+    rightDelim: '',
+    ctrlSeq: '\\begin{matrix}',
+    singleColumn: false,
+    extraClass: '',
+  },
+  pmatrix: {
+    leftDelim: '(',
+    rightDelim: ')',
+    ctrlSeq: '\\begin{pmatrix}',
+    singleColumn: false,
+    extraClass: '',
+  },
+  bmatrix: {
+    leftDelim: '[',
+    rightDelim: ']',
+    ctrlSeq: '\\begin{bmatrix}',
+    singleColumn: false,
+    extraClass: '',
+  },
+  Bmatrix: {
+    leftDelim: '{',
+    rightDelim: '}',
+    ctrlSeq: '\\begin{Bmatrix}',
+    singleColumn: false,
+    extraClass: '',
+  },
+  vmatrix: {
+    leftDelim: '|',
+    rightDelim: '|',
+    ctrlSeq: '\\begin{vmatrix}',
+    singleColumn: false,
+    extraClass: '',
+  },
+  Vmatrix: {
+    leftDelim: '\\|',
+    rightDelim: '\\|',
+    ctrlSeq: '\\begin{Vmatrix}',
+    singleColumn: false,
+    extraClass: '',
+  },
+  // Piecewise block (app spec/ux.md §5.1 "Piecewise (cases)"): one tall brace
+  // on the left, one free row per case written `condition: value`.
+  cases: {
+    leftDelim: '{',
+    rightDelim: '',
+    ctrlSeq: '\\begin{cases}',
+    singleColumn: true,
+    extraClass: 'mq-matrix-cases',
+  },
 };
 
 class MatrixCell extends MathBlock {
@@ -100,6 +167,11 @@ class MatrixCell extends MathBlock {
   keystroke(key: string, e: KeyboardEvent | undefined, ctrlr: Controller) {
     const matrix = this.parent as Matrix;
 
+    if (matrix.isSingleColumn()) {
+      const handled = this.keystrokeSingleColumn(key, e, ctrlr);
+      if (handled) return;
+    }
+
     switch (key) {
       case 'Ctrl-,':
         e?.preventDefault();
@@ -127,14 +199,7 @@ class MatrixCell extends MathBlock {
           e?.preventDefault();
           if (matrix.nRows === 1 && matrix.nCols === 1) {
             // Last cell: delete entire matrix
-            const rightward = matrix[R];
-            ctrlr.cursor.insLeftOf(matrix);
-            matrix.remove();
-            ctrlr.cursor[R] = rightward;
-            ctrlr.cursor.parent.bubble(function (node: MQNode) {
-              node.reflow();
-              return undefined;
-            });
+            matrix.removeWhole(ctrlr);
           } else if (this.col === 0) {
             // First column: delete the row (even if it has content)
             if (matrix.nRows > 1) {
@@ -175,6 +240,70 @@ class MatrixCell extends MathBlock {
     return result;
   }
 
+  /**
+   * Keystrokes that differ in a single-column environment (`cases`), where a
+   * row is one free slot and there are no columns. Rules follow the app's
+   * spec/ux.md §5.1 "Piecewise (cases)":
+   *  - `Ctrl-,` does nothing (no column to add).
+   *  - `Tab` moves to the next row; on the last row it escapes right out of
+   *    the block.
+   *  - `Backspace` in an empty row removes that row; in the last remaining
+   *    empty row it removes the whole block. At the START of a non-empty row
+   *    it moves the caret to the end of the row above, or out of the block
+   *    leftward from the first row (never deletes content).
+   * @param key - The normalised key name.
+   * @param e - The originating keyboard event, if any.
+   * @param ctrlr - The field controller.
+   * @returns true when the key was fully handled here; false to let the
+   *   general matrix handling (and then the default block handling) run.
+   */
+  keystrokeSingleColumn(
+    key: string,
+    e: KeyboardEvent | undefined,
+    ctrlr: Controller
+  ): boolean {
+    const matrix = this.parent as Matrix;
+    const cursor = ctrlr.cursor;
+
+    switch (key) {
+      case 'Ctrl-,':
+        e?.preventDefault();
+        return true;
+
+      case 'Tab':
+        if (this.row < matrix.nRows - 1) {
+          e?.preventDefault();
+          cursor.insAtLeftEnd(matrix.cells[this.row + 1][0] as MQNode);
+        } else {
+          // Last row: leave the block rightward, as Tab does in any block.
+          ctrlr.escapeDir(R, key, e);
+        }
+        return true;
+
+      case 'Backspace':
+        if (this.isEmpty()) {
+          e?.preventDefault();
+          if (matrix.nRows === 1) {
+            matrix.removeWhole(ctrlr);
+          } else {
+            matrix.deleteRow(this.row, ctrlr);
+          }
+          return true;
+        }
+        if (!cursor[L]) {
+          e?.preventDefault();
+          if (this.row > 0) {
+            cursor.insAtRightEnd(matrix.cells[this.row - 1][0] as MQNode);
+          } else {
+            cursor.insLeftOf(matrix);
+          }
+          return true;
+        }
+        return false;
+    }
+    return false;
+  }
+
   moveOutOf(dir: Direction, cursor: Cursor, updown?: 'up' | 'down') {
     const matrix = this.parent as Matrix;
 
@@ -199,7 +328,9 @@ class MatrixCell extends MathBlock {
   }
 
   write(cursor: Cursor, ch: string) {
-    if (ch === ',') {
+    // In a single-column environment there is no next cell, so a comma is
+    // ordinary content (e.g. `0<x, x<1: ...`).
+    if (ch === ',' && !(this.parent as Matrix).isSingleColumn()) {
       const matrix = this.parent as Matrix;
       if (this.col < matrix.nCols - 1) {
         cursor.insAtLeftEnd(matrix.cells[this.row][this.col + 1] as MQNode);
@@ -240,12 +371,44 @@ class Matrix extends MathCommand {
     super.createLeftOf(cursor);
   }
 
+  /**
+   * Build the LatexCmds factory for an environment.
+   * @param environment - Which environment the typed command inserts.
+   * @returns A factory producing a fresh 1 x 1 Matrix (every environment,
+   *   `cases` included, starts as a single cell; Enter grows it).
+   */
   static createDefault(environment: MatrixEnvironment) {
     return () => new Matrix(environment, 1, 1);
   }
 
   numBlocks() {
     return (this.nRows * this.nCols) as 1;
+  }
+
+  /**
+   * Whether this environment is a stack of rows with no column structure
+   * (see MatrixEnvConfig.singleColumn).
+   * @returns true for `cases`.
+   */
+  isSingleColumn(): boolean {
+    return MATRIX_CONFIGS[this.environment].singleColumn;
+  }
+
+  /**
+   * Remove the whole matrix from the tree, leaving the caret where it stood,
+   * and reflow the ancestors that were sized around it. Used when Backspace
+   * empties the last remaining cell.
+   * @param ctrlr - The field controller.
+   */
+  removeWhole(ctrlr: Controller) {
+    const rightward = this[R];
+    ctrlr.cursor.insLeftOf(this);
+    this.remove();
+    ctrlr.cursor[R] = rightward;
+    ctrlr.cursor.parent.bubble(function (node: MQNode) {
+      node.reflow();
+      return undefined;
+    });
   }
 
   isColumnEmpty(col: number): boolean {
@@ -322,6 +485,15 @@ class Matrix extends MathCommand {
   }
 
   addColumn(afterCol: number, cursor: Cursor) {
+    if (this.isSingleColumn()) {
+      // Every column-adding route is disabled for single-column environments
+      // in MatrixCell, so reaching here is a bug in a caller, not a user path.
+      console.warn(
+        'Matrix.addColumn called on single-column environment ' +
+          this.environment
+      );
+      return;
+    }
     this.nCols++;
 
     for (let r = 0; r < this.nRows; r++) {
@@ -383,6 +555,13 @@ class Matrix extends MathCommand {
   }
 
   deleteColumn(col: number, ctrlr: Controller) {
+    if (this.isSingleColumn()) {
+      console.warn(
+        'Matrix.deleteColumn called on single-column environment ' +
+          this.environment
+      );
+      return;
+    }
     if (this.nCols <= 1) return;
 
     const nextCol = col > 0 ? col - 1 : 0;
@@ -488,7 +667,10 @@ class Matrix extends MathCommand {
         );
       }
 
-      return h('span', { class: 'mq-matrix mq-non-leaf' }, tableContent);
+      const cls = config.extraClass
+        ? 'mq-matrix mq-non-leaf ' + config.extraClass
+        : 'mq-matrix mq-non-leaf';
+      return h('span', { class: cls }, tableContent);
     });
 
     return super.html();
@@ -543,6 +725,7 @@ class Matrix extends MathCommand {
   }
 
   text() {
+    if (this.isSingleColumn()) return this.textSingleColumn();
     let result = '[';
     for (let r = 0; r < this.nRows; r++) {
       if (r > 0) result += '; ';
@@ -557,7 +740,35 @@ class Matrix extends MathCommand {
     return result;
   }
 
+  /**
+   * Plain-text form of a single-column environment: the rows, semicolon
+   * separated, inside braces — `{x>0: x^2; -x}`.
+   * @returns The text form.
+   */
+  textSingleColumn(): string {
+    let result = '{';
+    for (let r = 0; r < this.nRows; r++) {
+      if (r > 0) result += '; ';
+      result += this.cells[r][0].text();
+    }
+    return result + '}';
+  }
+
+  /**
+   * Screen-reader form of a single-column environment: one "Case n" per row.
+   * @returns The mathspeak string.
+   */
+  mathspeakSingleColumn(): string {
+    let speech = `Start ${this.nRows} cases, `;
+    for (let r = 0; r < this.nRows; r++) {
+      if (r > 0) speech += '; ';
+      speech += `Case ${r + 1}: ` + (this.cells[r][0].mathspeak() || 'empty');
+    }
+    return speech + ', End cases';
+  }
+
   mathspeak() {
+    if (this.isSingleColumn()) return this.mathspeakSingleColumn();
     let speech = `Start ${this.nRows} by ${this.nCols} matrix, `;
     for (let r = 0; r < this.nRows; r++) {
       speech += `Row ${r + 1}: `;
@@ -575,7 +786,9 @@ class Matrix extends MathCommand {
     for (let r = 0; r < this.nRows; r++) {
       for (let c = 0; c < this.nCols; c++) {
         const cell = this.cells[r][c];
-        cell.ariaLabel = `row ${r + 1}, column ${c + 1}`;
+        cell.ariaLabel = this.isSingleColumn()
+          ? `case ${r + 1}`
+          : `row ${r + 1}, column ${c + 1}`;
       }
     }
 
@@ -693,10 +906,19 @@ class Matrix extends MathCommand {
     const rowStrings = this.splitTopLevel(content, 'row');
     const rows: string[][] = [];
 
+    // Single-column environments never split on `&` (see MatrixEnvConfig): the
+    // whole row is one cell, and any `&` in it parses as a literal symbol.
+    // They also KEEP blank interior rows: an empty case is serialised as a
+    // blank row and must survive a reload; only a blank last part (a trailing
+    // `\\` before `\end`) is dropped. Matrices skip every blank row as before.
+    const singleColumn = this.isSingleColumn();
     let maxCols = 0;
-    for (const rowStr of rowStrings) {
-      if (rowStr.trim() === '') continue;
-      const cols = this.splitTopLevel(rowStr, 'col');
+    for (let i = 0; i < rowStrings.length; i++) {
+      const rowStr = rowStrings[i];
+      if (rowStr.trim() === '') {
+        if (!singleColumn || i === rowStrings.length - 1) continue;
+      }
+      const cols = singleColumn ? [rowStr] : this.splitTopLevel(rowStr, 'col');
       rows.push(cols);
       maxCols = Math.max(maxCols, cols.length);
     }
@@ -726,6 +948,8 @@ LatexCmds.bmatrix = Matrix.createDefault('bmatrix');
 LatexCmds.Bmatrix = Matrix.createDefault('Bmatrix');
 LatexCmds.vmatrix = Matrix.createDefault('vmatrix');
 LatexCmds.Vmatrix = Matrix.createDefault('Vmatrix');
+// Piecewise block: one case on creation (owner decision 2026-09-13); Enter adds more.
+LatexCmds.cases = Matrix.createDefault('cases');
 
 // Short commands for easier typing
 LatexCmds.mat = Matrix.createDefault('pmatrix');
