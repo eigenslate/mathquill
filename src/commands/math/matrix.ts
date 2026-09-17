@@ -125,22 +125,47 @@ class MatrixCell extends MathBlock {
     this.row = row;
     this.col = col;
 
-    this.upOutOf = (cursor: Cursor): Cursor | undefined => {
+    /**
+     * Up from this cell: to the cell directly above, or OUT of the grid from
+     * the top row. Leaving puts the caret immediately before the matrix and
+     * returns `true`, which `Controller.moveUpDown` reads as "not consumed,
+     * keep bubbling" — so on the SAME press whatever is above the matrix also
+     * gets the key: an enclosing command's own `upOutOf` (a fraction hands it
+     * to its numerator), or, when the matrix sits directly in the field, the
+     * root block's `upOutOf` handler, which the host app turns into
+     * box-to-box navigation. Returning `undefined` instead STOPS the bubble;
+     * that is right for a within-grid move, and returning it unconditionally
+     * from the top row is what used to swallow the key and trap the caret.
+     * @param cursor - The field cursor, somewhere inside this cell.
+     * @returns `true` after leaving the grid (keep bubbling), `undefined`
+     *   when the move was handled within the grid.
+     */
+    this.upOutOf = (cursor: Cursor): true | undefined => {
       const matrix = this.parent as Matrix;
       if (this.row > 0) {
         cursor.insAtLeftEnd(matrix.cells[this.row - 1][this.col] as MQNode);
         return undefined;
       }
-      return undefined;
+      cursor.insLeftOf(matrix);
+      return true;
     };
 
-    this.downOutOf = (cursor: Cursor): Cursor | undefined => {
+    /**
+     * Down from this cell: to the cell directly below, or OUT of the grid
+     * from the bottom row, landing the caret immediately after the matrix and
+     * bubbling on (see `upOutOf` above for why).
+     * @param cursor - The field cursor, somewhere inside this cell.
+     * @returns `true` after leaving the grid (keep bubbling), `undefined`
+     *   when the move was handled within the grid.
+     */
+    this.downOutOf = (cursor: Cursor): true | undefined => {
       const matrix = this.parent as Matrix;
       if (this.row < matrix.nRows - 1) {
         cursor.insAtLeftEnd(matrix.cells[this.row + 1][this.col] as MQNode);
         return undefined;
       }
-      return undefined;
+      cursor.insRightOf(matrix);
+      return true;
     };
   }
 

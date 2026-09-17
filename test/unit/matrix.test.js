@@ -187,4 +187,204 @@ suite('matrix', function () {
       assert.equal(mq.latex(), latex, 'round-trips unchanged');
     });
   });
+
+  // Up/Down must be able to LEAVE the grid, not just step between rows.
+  // Before the fix, MatrixCell.upOutOf/downOutOf returned undefined at the
+  // top/bottom row, which Controller.moveUpDown reads as "handled, stop
+  // bubbling" — the key was swallowed and the caret was trapped in the matrix
+  // until Left/Right walked it out.
+  suite('up/down navigation', function () {
+    /**
+     * Render a 3x2 matrix with content on both sides of it, so "the caret
+     * landed immediately before/after the matrix" is a distinguishable
+     * position rather than an end of the root block.
+     * @returns The Matrix node.
+     */
+    function matrixWithNeighbours() {
+      mq.latex('x+\\begin{pmatrix}1&2\\\\3&4\\\\5&6\\end{pmatrix}+y');
+      var matrix = findMatrix();
+      assert.ok(matrix, 'matrix rendered');
+      return matrix;
+    }
+
+    test('Up from an interior row steps to the row above, same column', function () {
+      var matrix = matrixWithNeighbours();
+      focusCell(matrix, 1, 1);
+
+      mq.keystroke('Up');
+
+      assert.equal(
+        controller.cursor.parent,
+        matrix.cells[0][1],
+        'cursor is in the cell above, same column'
+      );
+    });
+
+    test('Down from an interior row steps to the row below, same column', function () {
+      var matrix = matrixWithNeighbours();
+      focusCell(matrix, 1, 1);
+
+      mq.keystroke('Down');
+
+      assert.equal(
+        controller.cursor.parent,
+        matrix.cells[2][1],
+        'cursor is in the cell below, same column'
+      );
+    });
+
+    test('Up from the top row leaves the matrix, landing before it', function () {
+      var matrix = matrixWithNeighbours();
+      focusCell(matrix, 0, 1);
+
+      mq.keystroke('Up');
+
+      assert.equal(
+        controller.cursor.parent,
+        controller.root,
+        'cursor left the matrix'
+      );
+      assert.equal(
+        controller.cursor[R],
+        matrix,
+        'cursor is immediately before the matrix'
+      );
+    });
+
+    test('Down from the bottom row leaves the matrix, landing after it', function () {
+      var matrix = matrixWithNeighbours();
+      focusCell(matrix, 2, 1);
+
+      mq.keystroke('Down');
+
+      assert.equal(
+        controller.cursor.parent,
+        controller.root,
+        'cursor left the matrix'
+      );
+      assert.equal(
+        controller.cursor[L],
+        matrix,
+        'cursor is immediately after the matrix'
+      );
+    });
+
+    test('leaving from the top row works from any column', function () {
+      var matrix = matrixWithNeighbours();
+      focusCell(matrix, 0, 0);
+
+      mq.keystroke('Up');
+
+      assert.equal(controller.cursor[R], matrix, 'cursor is before the matrix');
+    });
+
+    // The host app moves between its own boxes on the field's upOutOf /
+    // downOutOf. Leaving the grid must not consume the press, or a matrix at
+    // the edge of a field would cost two presses to escape the box.
+    test('leaving the grid still reaches the field handlers on the same press', function () {
+      var ups = 0,
+        downs = 0;
+      var field = MQ.MathField($('<span></span>').appendTo('#mock')[0], {
+        handlers: {
+          upOutOf: function () {
+            ups += 1;
+          },
+          downOutOf: function () {
+            downs += 1;
+          },
+        },
+      });
+      var fieldCtrlr = field.__controller;
+      field.latex('\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}');
+      var matrix = null;
+      fieldCtrlr.root.postOrder(function (node) {
+        if (node instanceof Matrix) matrix = node;
+      });
+      assert.ok(matrix, 'matrix rendered');
+
+      fieldCtrlr.cursor.insAtLeftEnd(matrix.cells[0][0]);
+      field.keystroke('Up');
+      assert.equal(ups, 1, 'the field saw upOutOf');
+      assert.equal(
+        fieldCtrlr.cursor[R],
+        matrix,
+        'and the caret sits before the matrix'
+      );
+
+      fieldCtrlr.cursor.insAtLeftEnd(matrix.cells[1][0]);
+      field.keystroke('Down');
+      assert.equal(downs, 1, 'the field saw downOutOf');
+      assert.equal(
+        fieldCtrlr.cursor[L],
+        matrix,
+        'and the caret sits after the matrix'
+      );
+    });
+
+    // Interior Up/Down never bubbles, so a row move must not be reported to
+    // the host as "the caret left the field".
+    test('a row-to-row move does not reach the field handlers', function () {
+      var moves = 0;
+      var field = MQ.MathField($('<span></span>').appendTo('#mock')[0], {
+        handlers: {
+          upOutOf: function () {
+            moves += 1;
+          },
+          downOutOf: function () {
+            moves += 1;
+          },
+        },
+      });
+      var fieldCtrlr = field.__controller;
+      field.latex('\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}');
+      var matrix = null;
+      fieldCtrlr.root.postOrder(function (node) {
+        if (node instanceof Matrix) matrix = node;
+      });
+
+      fieldCtrlr.cursor.insAtLeftEnd(matrix.cells[0][0]);
+      field.keystroke('Down');
+      assert.equal(fieldCtrlr.cursor.parent, matrix.cells[1][0], 'moved a row');
+      assert.equal(moves, 0, 'the field saw nothing');
+    });
+
+    test('Left/Right still walk the columns and exit sideways', function () {
+      var matrix = matrixWithNeighbours();
+      focusCell(matrix, 0, 1);
+
+      mq.keystroke('Left');
+      assert.equal(
+        controller.cursor.parent,
+        matrix.cells[0][0],
+        'Left from column 1 goes to column 0'
+      );
+
+      // The cell holds one character, so Left steps over it before the next
+      // Left finds the cell's left edge and walks out of the matrix.
+      mq.keystroke('Left Left');
+      assert.equal(
+        controller.cursor.parent,
+        controller.root,
+        'Left from the left edge of column 0 leaves the matrix'
+      );
+      assert.equal(
+        controller.cursor[R],
+        matrix,
+        'and lands immediately before it'
+      );
+
+      controller.cursor.insAtRightEnd(matrix.cells[2][1]);
+      mq.keystroke('Right');
+      assert.equal(
+        controller.cursor.parent,
+        controller.root,
+        'Right from the last column leaves the matrix'
+      );
+      assert.equal(
+        controller.cursor[L],
+        matrix,
+        'and lands immediately after it'
+      );
+    });
+  });
 });

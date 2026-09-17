@@ -159,8 +159,13 @@ class NodeBase {
   mathspeakTemplate: string[] | undefined;
   upInto: MQNode | undefined;
   downInto: MQNode | undefined;
-  upOutOf?: MQNode | ((cursor: Cursor) => Cursor | undefined);
-  downOutOf?: MQNode | ((cursor: Cursor) => Cursor | undefined);
+  // A node to jump into, or a handler run with the cursor. A handler that
+  // returns `true` lets the key keep bubbling to the ancestors (used by a
+  // matrix cell, which moves the caret out of the grid and then lets whatever
+  // is above/below the matrix, up to the host's own handler, have the key);
+  // anything else stops the bubble. See Controller.moveUpDown.
+  upOutOf?: MQNode | ((cursor: Cursor) => Cursor | true | undefined);
+  downOutOf?: MQNode | ((cursor: Cursor) => Cursor | true | undefined);
 
   isPartOfOperator: boolean | undefined;
 

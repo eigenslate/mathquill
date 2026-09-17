@@ -246,4 +246,125 @@ suite('cases (piecewise)', function () {
       assert.equal(root.querySelectorAll('.mq-matrix-delim-right').length, 1);
     });
   });
+
+  // A cases block is a single column, so Up/Down are its ONLY vertical
+  // navigation — and before the fix the first and last rows swallowed the key
+  // (MatrixCell.upOutOf/downOutOf returned undefined instead of leaving the
+  // block), trapping the caret exactly as in a matrix.
+  suite('up/down navigation', function () {
+    /**
+     * Render a three-row cases block with content on both sides of it, so
+     * "immediately before/after the block" is a distinguishable position.
+     * @returns The Matrix node for the block.
+     */
+    function casesWithNeighbours() {
+      mq.latex('x+\\begin{cases}a \\\\ b \\\\ c\\end{cases}+y');
+      var m = findMatrix();
+      assert.ok(m, 'cases rendered');
+      assert.equal(m.nRows, 3, 'three cases');
+      return m;
+    }
+
+    test('Up from an interior row steps to the row above', function () {
+      var m = casesWithNeighbours();
+      focusRow(m, 1);
+
+      mq.keystroke('Up');
+
+      assert.equal(cursorRow(), 0, 'cursor is in the row above');
+    });
+
+    test('Down from an interior row steps to the row below', function () {
+      var m = casesWithNeighbours();
+      focusRow(m, 1);
+
+      mq.keystroke('Down');
+
+      assert.equal(cursorRow(), 2, 'cursor is in the row below');
+    });
+
+    test('Up from the first row leaves the block, landing before it', function () {
+      var m = casesWithNeighbours();
+      focusRow(m, 0);
+
+      mq.keystroke('Up');
+
+      assert.equal(controller.cursor.parent, controller.root, 'left the block');
+      assert.equal(
+        controller.cursor[R],
+        m,
+        'cursor is immediately before the block'
+      );
+    });
+
+    test('Down from the last row leaves the block, landing after it', function () {
+      var m = casesWithNeighbours();
+      focusRow(m, 2);
+
+      mq.keystroke('Down');
+
+      assert.equal(controller.cursor.parent, controller.root, 'left the block');
+      assert.equal(
+        controller.cursor[L],
+        m,
+        'cursor is immediately after the block'
+      );
+    });
+
+    // The host app steps between its boxes on the field's own handlers, so
+    // leaving the block must not consume the press.
+    test('leaving the block still reaches the field handlers on the same press', function () {
+      var ups = 0,
+        downs = 0;
+      var field = MQ.MathField($('<span></span>').appendTo('#mock')[0], {
+        handlers: {
+          upOutOf: function () {
+            ups += 1;
+          },
+          downOutOf: function () {
+            downs += 1;
+          },
+        },
+      });
+      var fieldCtrlr = field.__controller;
+      field.latex('\\begin{cases}a \\\\ b\\end{cases}');
+      var block = null;
+      fieldCtrlr.root.postOrder(function (node) {
+        if (node instanceof Matrix) block = node;
+      });
+      assert.ok(block, 'cases rendered');
+
+      fieldCtrlr.cursor.insAtLeftEnd(block.cells[0][0]);
+      field.keystroke('Up');
+      assert.equal(ups, 1, 'the field saw upOutOf');
+      assert.equal(fieldCtrlr.cursor[R], block, 'caret sits before the block');
+
+      fieldCtrlr.cursor.insAtLeftEnd(block.cells[1][0]);
+      field.keystroke('Down');
+      assert.equal(downs, 1, 'the field saw downOutOf');
+      assert.equal(fieldCtrlr.cursor[L], block, 'caret sits after the block');
+    });
+
+    test('Left/Right still walk in and out sideways', function () {
+      var m = casesWithNeighbours();
+      focusRow(m, 1);
+
+      mq.keystroke('Left');
+      assert.equal(
+        controller.cursor.parent,
+        controller.root,
+        'Left from the start of a row leaves the block'
+      );
+      assert.equal(controller.cursor[R], m, 'landing before it');
+
+      controller.cursor.insAtRightEnd(m.cells[1][0]);
+      mq.keystroke('Right');
+      assert.equal(
+        controller.cursor.parent,
+        controller.root,
+        'Right from the end of a row leaves the block'
+      );
+      assert.equal(controller.cursor[L], m, 'landing after it');
+    });
+  });
 });

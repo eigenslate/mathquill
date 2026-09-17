@@ -344,7 +344,11 @@ class Controller_keystroke extends Controller_focusBlur {
           if (typeof prop === 'function')
             prop = prop.call(ancestor, cursor) as any; // TODO - figure out if we need to assign to prop
           if (prop instanceof MQNode) cursor.jumpUpDown(ancestor, prop);
-          if ((prop as any) !== true) return false; // TODO - figure out how this can return true
+          // `true` means "I did not consume the key": keep bubbling so an
+          // outer command — or the root block's handler, i.e. the host app —
+          // still sees it on this press. A matrix cell returns it when the
+          // top/bottom row moves the caret out of the grid.
+          if ((prop as any) !== true) return false;
         }
         return undefined;
       });
