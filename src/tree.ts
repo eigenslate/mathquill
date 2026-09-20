@@ -604,6 +604,29 @@ class Fragment {
 var LatexCmds: LatexCmds = {};
 var CharCmds: CharCmds = {};
 
+/**
+ * Read one entry out of a command table (`LatexCmds` / `CharCmds`).
+ *
+ * The tables are plain objects, so a bare `table[name]` lookup also reaches
+ * everything on `Object.prototype`: control sequences such as `\constructor`,
+ * `\toString`, `\hasOwnProperty`, `\valueOf` and `\__proto__` would resolve to
+ * an inherited member and be treated as a registered command, which then gets
+ * constructed or called as if it were one. Only OWN properties are real
+ * registrations, so anything inherited is reported as unknown. Every dynamic
+ * read of either table must go through here; the registrations themselves
+ * still write to the tables directly.
+ *
+ * @param table The command table to read — `LatexCmds` or `CharCmds`.
+ * @param name The command name to look up, exactly as it is registered.
+ * @returns The registered entry, or `undefined` when `name` is not registered.
+ */
+function lookUpCmd<T>(table: Record<string, T>, name: string): T | undefined {
+  // Called off Object.prototype rather than as `table.hasOwnProperty`: the
+  // table itself may register a command named "hasOwnProperty".
+  if (!Object.prototype.hasOwnProperty.call(table, name)) return undefined;
+  return table[name];
+}
+
 function isMQNodeClass(cmd: any): cmd is typeof MQNode {
   return cmd && cmd.prototype instanceof MQNode;
 }

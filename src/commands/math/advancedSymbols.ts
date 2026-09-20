@@ -143,7 +143,11 @@ LatexCmds.mathbb = class extends MathCommand {
       .skip(string('}'))
       .map(function (c) {
         // instantiate the class for the matching char
-        var cmd = LatexCmds[c];
+        var cmd = lookUpCmd(LatexCmds, c);
+        // Every letter the regex above accepts is registered further down this
+        // file, so this cannot miss; fail loudly rather than call `undefined`
+        // if a registration is ever dropped.
+        if (!cmd) throw 'unknown number set: \\mathbb{' + c + '}';
         if (isMQNodeClass(cmd)) {
           return new cmd();
         } else {

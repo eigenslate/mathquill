@@ -52,7 +52,6 @@ type BracketSide = L | R | 0;
 type InnerMathField = any;
 type InnerFields = any;
 type LatexCmdsAny = any;
-type CharCmdsAny = any;
 type LatexCmdsSingleCharBuilder = Record<string, (char: string) => MQNode>;
 type LatexCmdsSingleChar = Record<
   string,

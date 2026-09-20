@@ -305,7 +305,7 @@ baseOptionProcessors.autoCommands = function (cmds: string | undefined) {
       throw 'autocommand "' + cmd + '" not minimum length of 2';
     }
 
-    if (LatexCmds[cmd] === OperatorName) {
+    if (lookUpCmd(LatexCmds, cmd) === OperatorName) {
       throw '"' + cmd + '" is a built-in operator name';
     }
     dict[cmd] = 1;
@@ -377,13 +377,26 @@ class Letter extends Variable {
       // check for an autocommand, going thru substrings longest to shortest
       while (str.length) {
         if (autoCmds.hasOwnProperty(str)) {
+          // Resolve BEFORE removing the typed letters: an autocommand naming
+          // something that is not registered has nothing to insert, and the
+          // letters must survive.
+          var cmd = lookUpCmd(LatexCmds, str);
+          if (!cmd) {
+            console.warn(
+              'MathQuill: autoCommand "' +
+                str +
+                '" is not a registered LaTeX command; leaving it as typed'
+            );
+            str = str.slice(1);
+            continue;
+          }
+
           l = this;
           for (i = 1; l && i < str.length; i += 1, l = l[L]);
 
           new Fragment(l, this).remove();
           cursor[L] = (l as MQNode)[L];
 
-          var cmd = LatexCmds[str];
           var node;
           if (isMQNodeClass(cmd)) {
             node = new (cmd as typeof TempSingleCharNode)(str); // TODO - How do we know that this class expects a single str input?

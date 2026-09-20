@@ -61,10 +61,10 @@ var latexMathParser = (function () {
   function lookUpCtrlSeq(ctrlSeq: string, escaped: boolean) {
     var cmds = LatexCmds as LatexCmdsSingleChar;
     if (escaped) {
-      var escapedKlass = cmds['\\' + ctrlSeq];
+      var escapedKlass = lookUpCmd(cmds, '\\' + ctrlSeq);
       if (escapedKlass) return escapedKlass;
     }
-    return cmds[ctrlSeq];
+    return lookUpCmd(cmds, ctrlSeq);
   }
 
   var controlSequence = regex(/^[^\\a-eg-zA-Z]/) // hotfix #164; match MathBlock::write

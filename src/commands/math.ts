@@ -601,7 +601,7 @@ class MathBlock extends MathElement {
     else if (options && options.typingPercentWritesPercentOf && ch === '%')
       return (LatexCmds as LatexCmdsSingleCharBuilder).percentof(ch);
     else if (
-      (cons = (CharCmds as CharCmdsAny)[ch] || (LatexCmds as LatexCmdsAny)[ch])
+      (cons = lookUpCmd<any>(CharCmds, ch) || lookUpCmd<any>(LatexCmds, ch))
     ) {
       if (cons.constructor) {
         return new cons(ch);
