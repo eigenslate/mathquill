@@ -376,7 +376,7 @@ class Letter extends Variable {
       }
       // check for an autocommand, going thru substrings longest to shortest
       while (str.length) {
-        if (autoCmds.hasOwnProperty(str)) {
+        if (hasOwn(autoCmds, str)) {
           // Resolve BEFORE removing the typed letters: an autocommand naming
           // something that is not registered has nothing to insert, and the
           // letters must survive.
@@ -438,8 +438,8 @@ class Letter extends Variable {
     // only allow autoParenthesized functions that are also autoOperatorNames
     while (str.length) {
       if (
-        autoParenthesizedFunctions.hasOwnProperty(str) &&
-        autoOperatorNames.hasOwnProperty(str)
+        hasOwn(autoParenthesizedFunctions, str) &&
+        hasOwn(autoOperatorNames, str)
       ) {
         return cursor.parent.write(cursor, '(');
       }
@@ -521,7 +521,7 @@ class Letter extends Variable {
         var word = str.slice(i, i + len);
         var last: MQNode = undefined!; // TODO - TS complaining that we use last before assigning to it
 
-        if (autoOps.hasOwnProperty(word)) {
+        if (hasOwn(autoOps, word)) {
           for (
             var j = 0, letter: NodeRef = first;
             j < len;
@@ -533,12 +533,12 @@ class Letter extends Variable {
             }
           }
 
-          var isBuiltIn = BuiltInOpNames.hasOwnProperty(word);
+          var isBuiltIn = hasOwn(BuiltInOpNames, word);
           first.ctrlSeq =
             (isBuiltIn ? '\\' : '\\operatorname{') + first.ctrlSeq;
           last.ctrlSeq += isBuiltIn ? ' ' : '}';
 
-          if (TwoWordOpNames.hasOwnProperty(word)) {
+          if (hasOwn(TwoWordOpNames, word)) {
             const lastL = last[L];
             const lastLL = lastL && lastL[L];
             const lastLLL = (lastLL && lastLL[L]) as MQNode;
@@ -703,7 +703,7 @@ class OperatorName extends MQSymbol {
 }
 
 for (var fn in Options.prototype.autoOperatorNames)
-  if (Options.prototype.autoOperatorNames.hasOwnProperty(fn)) {
+  if (hasOwn(Options.prototype.autoOperatorNames, fn)) {
     (LatexCmds as LatexCmdsAny)[fn as string] = OperatorName;
   }
 

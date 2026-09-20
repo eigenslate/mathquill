@@ -146,4 +146,92 @@ suite('control sequence lookup', function () {
       assert.equal(mq.latex(), '\\frac{ }{ }');
     });
   });
+
+  // The option dictionaries are built from names the host supplies, so they
+  // can hold an entry called "hasOwnProperty". Reading them as
+  // `dict.hasOwnProperty(key)` then calls that entry instead of the method
+  // and throws; `hasOwn` (src/tree.ts) is the guard.
+  suite('option dictionaries named after Object.prototype', function () {
+    /**
+     * Build a fresh MathField in the mock container.
+     *
+     * @param options The MathQuill config to construct it with.
+     * @returns The MathField.
+     */
+    function fieldWith(options) {
+      return MQ.MathField($('<span></span>').appendTo('#mock')[0], options);
+    }
+
+    test('autoCommands may be called hasOwnProperty', function () {
+      // Control: the same field without the bogus entry. "hasOwnProperty"
+      // names no registered command, so configuring it must change nothing.
+      var control = fieldWith({ autoCommands: 'pi' });
+      control.typedText('hasOwnProperty');
+      var expected = control.latex();
+
+      var field = fieldWith({ autoCommands: 'pi hasOwnProperty' });
+      // Typing it must not throw, and must land exactly where the control
+      // did: an unknown auto-command leaves the letters as typed (the
+      // default autoOperatorNames still italicize "Pr" inside them).
+      field.typedText('hasOwnProperty');
+      assert.equal(field.latex(), expected);
+
+      // A real auto-command in the same config still substitutes.
+      field.latex('');
+      field.typedText('pi');
+      assert.equal(field.latex(), '\\pi');
+    });
+
+    test('autoOperatorNames may be called hasOwnProperty', function () {
+      var field = fieldWith({ autoOperatorNames: 'ln hasOwnProperty' });
+      field.typedText('hasOwnProperty');
+      assert.equal(field.latex(), '\\operatorname{hasOwnProperty}');
+
+      field.latex('');
+      field.typedText('ln');
+      assert.equal(field.latex(), '\\ln');
+    });
+
+    test('autoParenthesizedFunctions may be called hasOwnProperty', function () {
+      var field = fieldWith({
+        autoOperatorNames: 'ln hasOwnProperty',
+        autoParenthesizedFunctions: 'hasOwnProperty',
+      });
+      field.typedText('hasOwnProperty');
+      assert.equal(
+        field.latex(),
+        '\\operatorname{hasOwnProperty}\\left(\\right)'
+      );
+    });
+
+    test('quietEmptyDelimiters may be called hasOwnProperty', function () {
+      var field = fieldWith({ quietEmptyDelimiters: 'hasOwnProperty ()' });
+      field.latex('\\left(\\right)');
+      // Reading the delimiter dict must not throw.
+      assert.ok(typeof field.mathspeak() === 'string');
+    });
+
+    test('config() tolerates an option named hasOwnProperty', function () {
+      var field = fieldWith({});
+      var options = { autoCommands: 'pi' };
+      options.hasOwnProperty = 1;
+      field.config(options);
+      field.typedText('pi');
+      assert.equal(field.latex(), '\\pi');
+    });
+
+    test('config() does not run an Object.prototype method as a processor', function () {
+      var field = fieldWith({});
+      var options = {};
+      options.toString = 'not a processor';
+      field.config(options);
+      // `optionProcessors` is read with the caller's option name too. An
+      // unguarded read finds Object.prototype.toString and runs it as this
+      // option's processor, storing '[object Undefined]'; the value must be
+      // stored verbatim instead.
+      assert.equal(field.__options.toString, 'not a processor');
+      field.typedText('x');
+      assert.equal(field.latex(), 'x');
+    });
+  });
 });

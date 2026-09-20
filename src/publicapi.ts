@@ -227,7 +227,7 @@ function getInterface(v: number): MathQuill.v3.API | MathQuill.v1.API {
 
   function config(currentOptions: CursorOptions, newOptions: ConfigOptions) {
     for (const name in newOptions) {
-      if (newOptions.hasOwnProperty(name)) {
+      if (hasOwn(newOptions, name)) {
         if (name === 'substituteKeyboardEvents' && version >= 3) {
           throw new Error(
             [
@@ -238,7 +238,12 @@ function getInterface(v: number): MathQuill.v3.API | MathQuill.v1.API {
           );
         }
         var value = (newOptions as any)[name]; // TODO - think about typing this better
-        var processor = (optionProcessors as any)[name]; // TODO - validate option processors better
+        // Own-property read: `name` comes from the caller's config object, so
+        // an option called "toString" or "valueOf" would otherwise pick up an
+        // Object.prototype method and run it as this option's processor.
+        var processor = hasOwn(optionProcessors, name)
+          ? (optionProcessors as any)[name]
+          : undefined;
         (currentOptions as any)[name] = processor ? processor(value) : value; // TODO - think about typing better
       }
     }

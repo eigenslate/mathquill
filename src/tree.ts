@@ -239,7 +239,7 @@ class NodeBase {
     if (!this.parent || this.parent.ctrlSeq === undefined) return false;
     // Remove any leading \left or \right from the ctrl sequence before looking it up.
     var key = this.parent.ctrlSeq.replace(/^\\(left|right)?/, '');
-    return dlms.hasOwnProperty(key);
+    return hasOwn(dlms, key);
   }
 
   isStyleBlock() {
@@ -605,6 +605,26 @@ var LatexCmds: LatexCmds = {};
 var CharCmds: CharCmds = {};
 
 /**
+ * Does `obj` carry `key` as its OWN property?
+ *
+ * Always call this rather than `obj.hasOwnProperty(key)`. Every dictionary
+ * MathQuill looks things up in — the command tables, and the option dicts
+ * built from `autoCommands`, `autoOperatorNames`,
+ * `autoParenthesizedFunctions` and `quietEmptyDelimiters` — is a plain object
+ * keyed by strings the user supplies, so it can legitimately hold an entry
+ * called "hasOwnProperty". The method form then calls that entry instead of
+ * the real method and throws; and a plain `key in obj` or `obj[key]` test
+ * would find inherited members that are not registrations at all.
+ *
+ * @param obj The dictionary to test.
+ * @param key The property name to test for.
+ * @returns True when `key` is an own property of `obj`.
+ */
+function hasOwn(obj: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+/**
  * Read one entry out of a command table (`LatexCmds` / `CharCmds`).
  *
  * The tables are plain objects, so a bare `table[name]` lookup also reaches
@@ -621,9 +641,7 @@ var CharCmds: CharCmds = {};
  * @returns The registered entry, or `undefined` when `name` is not registered.
  */
 function lookUpCmd<T>(table: Record<string, T>, name: string): T | undefined {
-  // Called off Object.prototype rather than as `table.hasOwnProperty`: the
-  // table itself may register a command named "hasOwnProperty".
-  if (!Object.prototype.hasOwnProperty.call(table, name)) return undefined;
+  if (!hasOwn(table, name)) return undefined;
   return table[name];
 }
 
