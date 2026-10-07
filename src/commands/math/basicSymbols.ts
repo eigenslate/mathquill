@@ -278,19 +278,12 @@ function bindVariable(
   return () => new Variable(ch, h.entityText(htmlEntity));
 }
 
-Options.prototype.autoCommands = {
-  // doubled capital letters auto-convert to the canonical blackboard-bold sets,
-  // e.g. typing "RR" yields ℝ. The matching \mathbb symbols are defined in
-  // advancedSymbols.ts.
-  _maxLength: 2,
-  NN: 1,
-  PP: 1,
-  ZZ: 1,
-  QQ: 1,
-  RR: 1,
-  CC: 1,
-  HH: 1,
-};
+// No auto-commands by default. In particular doubled capitals ("RR") must NOT
+// auto-convert to blackboard bold: `UU^H` has to stay a product of plain
+// letters. The \mathbb sets in advancedSymbols.ts are reached by their
+// backslash commands (\RR, \R, \reals, \mathbb{R}) or by a host-configured
+// autoCommands list.
+Options.prototype.autoCommands = { _maxLength: 0 };
 baseOptionProcessors.autoCommands = function (cmds: string | undefined) {
   if (typeof cmds !== 'string' || !/^[a-z]+(?: [a-z]+)*$/i.test(cmds)) {
     throw '"' + cmds + '" not a space-delimited list of only letters';

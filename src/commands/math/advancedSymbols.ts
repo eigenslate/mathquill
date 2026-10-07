@@ -157,9 +157,9 @@ LatexCmds.mathbb = class extends MathCommand {
   }
 };
 
-// The canonical sets of numbers. Each also has a doubled-letter input shortcut
-// (e.g. typing "RR" yields ℝ) registered in the autoCommands default in
-// basicSymbols.ts; the XX aliases below are what those shortcuts instantiate.
+// The canonical sets of numbers. Reached only by their backslash commands: the
+// XX aliases below exist so `\RR` works alongside `\R` / `\reals`; there is
+// deliberately no doubled-letter typing shortcut (basicSymbols.ts autoCommands).
 LatexCmds.N =
   LatexCmds.NN =
   LatexCmds.naturals =

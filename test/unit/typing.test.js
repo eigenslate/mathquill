@@ -1203,6 +1203,21 @@ suite('typing with auto-replaces', function () {
     });
   });
 
+  test('doubled capitals are plain letters by default (no blackboard-bold shortcut)', function () {
+    // The fork used to ship `NN PP ZZ QQ RR CC HH` as default autoCommands,
+    // which made `UU^H`-style products impossible to type. Blackboard bold is
+    // reached only through its backslash commands now.
+    mq.typedText('RR');
+    assertLatex('RR');
+    mq.keystroke('Ctrl-Backspace');
+    mq.typedText('UU^H');
+    assertLatex('UU^H');
+    mq.keystroke('Ctrl-Backspace');
+    mq.keystroke('Ctrl-Backspace');
+    mq.latex('RR');
+    assert.equal(mq.latex(), 'mathbb{R}');
+  });
+
   suite('autoCommands', function () {
     var normalConfig = {
       autoOperatorNames: 'sin pp',
