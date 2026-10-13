@@ -308,6 +308,16 @@ baseOptionProcessors.autoCommands = function (cmds: string | undefined) {
   return dict;
 };
 
+// The autoCommands that still convert for a letter typed directly in a
+// subscript while `disableAutoSubstitutionInSubscripts` is on; matched
+// INSTEAD of `autoCommands` there, never in addition to it. Same list format
+// and validator as `autoCommands`; empty by default, which is upstream's
+// behaviour (no autocommand at all in a subscript). See CLAUDE.md
+// "Substitution inside subscripts".
+Options.prototype.autoCommandsInSubscripts = { _maxLength: 0 };
+baseOptionProcessors.autoCommandsInSubscripts =
+  baseOptionProcessors.autoCommands;
+
 Options.prototype.quietEmptyDelimiters = {};
 baseOptionProcessors.quietEmptyDelimiters = function (dlms: string = '') {
   var list = dlms.split(' ');
@@ -346,14 +356,19 @@ class Letter extends Variable {
     super(ch);
     this.letter = ch;
   }
+  /**
+   * Convert the letter run ending at this letter into an autocommand if one
+   * matches. Directly in a subscript with `disableAutoSubstitutionInSubscripts`
+   * on, the `autoCommandsInSubscripts` list is matched instead of
+   * `autoCommands` (empty by default, so nothing converts there).
+   * @param cursor The cursor the letter was just created left of.
+   * @returns Whatever the matched command's `createLeftOf` returns, or nothing.
+   */
   checkAutoCmds(cursor: Cursor) {
-    //exit early if in simple subscript and disableAutoSubstitutionInSubscripts is set.
-    if (this.shouldIgnoreSubstitutionInSimpleSubscript(cursor.options)) {
-      return;
-    }
-
     //handle autoCommands
-    var autoCmds = cursor.options.autoCommands;
+    var autoCmds = this.shouldIgnoreSubstitutionInSimpleSubscript(cursor.options)
+      ? cursor.options.autoCommandsInSubscripts
+      : cursor.options.autoCommands;
     var maxLength = autoCmds._maxLength || 0;
     if (maxLength > 0) {
       // want longest possible autocommand, so join together longest
