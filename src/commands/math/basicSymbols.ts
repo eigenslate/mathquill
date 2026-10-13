@@ -366,7 +366,9 @@ class Letter extends Variable {
    */
   checkAutoCmds(cursor: Cursor) {
     //handle autoCommands
-    var autoCmds = this.shouldIgnoreSubstitutionInSimpleSubscript(cursor.options)
+    var autoCmds = this.shouldIgnoreSubstitutionInSimpleSubscript(
+      cursor.options
+    )
       ? cursor.options.autoCommandsInSubscripts
       : cursor.options.autoCommands;
     var maxLength = autoCmds._maxLength || 0;
@@ -768,12 +770,51 @@ LatexCmds.f = class extends Letter {
 LatexCmds[' '] = LatexCmds.space = () =>
   new DigitGroupingChar('\\ ', h('span', {}, [h.text(U_NO_BREAK_SPACE)]), ' ');
 
-LatexCmds['.'] = () =>
-  new DigitGroupingChar(
-    '.',
-    h('span', { class: 'mq-digit' }, [h.text('.')]),
-    '.'
-  );
+/**
+ * The decimal point. Typed right after an auto-subscript of digits it
+ * continues that subscript the way a further digit does (`v1.2` → `v_{1.2}`,
+ * app spec/ux.md §5.1 "Auto-subscript numerals"): `Digit.createLeftOf` leaves
+ * the caret OUTSIDE the script after each digit and re-enters on the next one,
+ * so without this rule the dot lands at the base level (`v_{1}.2`). The dot
+ * never STARTS a subscript (`v.5` stays `v.5`: a dot after a variable is the
+ * component accessor, not a number) and, like a digit, leaves the caret
+ * outside again afterwards.
+ */
+class DecimalPoint extends DigitGroupingChar {
+  constructor() {
+    super('.', h('span', { class: 'mq-digit' }, [h.text('.')]), '.');
+  }
+
+  /**
+   * Create this dot left of the cursor, continuing an auto-subscript of
+   * digits when the dot directly follows one.
+   * @param cursor The cursor to create at.
+   */
+  createLeftOf(cursor: Cursor) {
+    // The script to continue: a SupSub right before the caret whose subscript
+    // ends in a digit, hanging off an italic variable — exactly the shape the
+    // auto-subscript rule builds.
+    const script =
+      cursor[L] instanceof SupSub ? (cursor[L] as SupSub) : undefined;
+    const scriptL = script && script[L];
+    const sub =
+      cursor.options.autoSubscriptNumerals &&
+      script &&
+      scriptL instanceof Variable &&
+      scriptL.isItalic !== false &&
+      script.sub &&
+      script.sub.getEnd(R) instanceof Digit
+        ? script.sub
+        : undefined;
+    if (script && sub) {
+      cursor.insAtRightEnd(sub);
+      super.createLeftOf(cursor);
+      cursor.insRightOf(script);
+    } else super.createLeftOf(cursor);
+  }
+}
+
+LatexCmds['.'] = () => new DecimalPoint();
 
 LatexCmds["'"] = LatexCmds.prime = bindVanillaSymbol("'", '&prime;', 'prime');
 LatexCmds['″'] = LatexCmds.dprime = bindVanillaSymbol(

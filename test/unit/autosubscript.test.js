@@ -48,6 +48,54 @@ suite('autoSubscript', function () {
     assert.equal(mq.latex(), '\\sin_{10}2');
   });
 
+  // A decimal point right after an auto-subscript of digits continues it like
+  // a further digit would (DecimalPoint.createLeftOf); the caret is outside
+  // again afterwards, so the next digit re-enters as usual.
+  suite('decimal point continues an auto-subscript', function () {
+    test('v1.2 is v_{1.2}', function () {
+      assert.equal(mq.typedText('v1.2').latex(), 'v_{1.2}');
+      assert.equal(mq.typedText('5').latex(), 'v_{1.25}');
+    });
+
+    test('the caret is outside the script after the dot, like after a digit', function () {
+      mq.typedText('v1.');
+      assert.equal(cursor.parent, rootBlock);
+      assert.equal(mq.latex(), 'v_{1.}');
+    });
+
+    test('a dot never STARTS a subscript', function () {
+      assert.equal(mq.typedText('v.5').latex(), 'v.5');
+    });
+
+    test('a typed v_1 is continued too, exactly as a digit would continue it', function () {
+      // The rule keys on the SHAPE (variable, digit-ending subscript), as
+      // Digit.createLeftOf does: `v_1` Right `2` gives v_{12}, so `.5` gives
+      // v_{1.5}.
+      assert.equal(
+        mq.typedText('v_1').keystroke('Right').typedText('.5').latex(),
+        'v_{1.5}'
+      );
+    });
+
+    test('a dot after a non-digit subscript stays outside', function () {
+      mq.latex('x_{i}');
+      mq.typedText('.5');
+      assert.equal(mq.latex(), 'x_{i}.5');
+    });
+
+    test('a dot after a plain number stays inline', function () {
+      assert.equal(mq.typedText('12.5').latex(), '12.5');
+    });
+
+    test('without autoSubscriptNumerals the dot is inert', function () {
+      var plain = MQ.MathField($('<span></span>').appendTo('#mock')[0]);
+      assert.equal(
+        plain.typedText('v_1').keystroke('Right').typedText('.2').latex(),
+        'v_{1}.2'
+      );
+    });
+  });
+
   test('backspace through compound subscript', function () {
     mq.latex('x_{2_2}');
 
