@@ -55,6 +55,7 @@ var EMBEDS: Record<string, (data: EmbedOptionsData) => EmbedOptions> = {};
 const processedOptions = {
   handlers: true,
   autoCommands: true,
+  autoCommandsInSubscripts: true,
   quietEmptyDelimiters: true,
   autoParenthesizedFunctions: true,
   autoOperatorNames: true,
@@ -113,6 +114,10 @@ class Options {
   overrideKeystroke: (key: string, event: KeyboardEvent) => void;
   autoOperatorNames: AutoDict;
   autoCommands: AutoDict;
+  /** The autoCommands matched INSTEAD of `autoCommands` for a letter typed
+   *  directly in a subscript while `disableAutoSubstitutionInSubscripts` is
+   *  on (CLAUDE.md "Substitution inside subscripts"). Empty by default. */
+  autoCommandsInSubscripts: AutoDict;
   autoParenthesizedFunctions: AutoDict;
   quietEmptyDelimiters: { [id: string]: any };
   disableAutoSubstitutionInSubscripts?: boolean;

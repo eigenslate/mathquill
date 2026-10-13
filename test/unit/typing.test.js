@@ -1366,6 +1366,46 @@ suite('typing with auto-replaces', function () {
       mq.config(normalConfig);
     });
 
+    test('autoCommandsInSubscripts exempts a list from the subscript disable', function () {
+      // The exemption list is matched INSTEAD of autoCommands inside a simple
+      // subscript: a listed command converts there, an unlisted one types as
+      // letters, and the top level still uses the full list.
+      mq.config({
+        autoCommands: 'pi theta sum',
+        autoCommandsInSubscripts: 'theta',
+        disableAutoSubstitutionInSubscripts: true,
+      });
+      mq.typedText('x_theta');
+      assertLatex('x_{\\theta}');
+      mq.latex('');
+      mq.typedText('x_pi');
+      assertLatex('x_{pi}');
+      mq.latex('');
+      mq.typedText('x_sum');
+      assertLatex('x_{sum}');
+      mq.latex('');
+      mq.typedText('pi');
+      assertLatex('\\pi');
+      mq.latex('');
+      // The list only applies while the disable flag is on.
+      mq.config({
+        autoCommands: 'pi theta sum',
+        autoCommandsInSubscripts: 'theta',
+        disableAutoSubstitutionInSubscripts: false,
+      });
+      mq.typedText('x_pi');
+      assertLatex('x_{\\pi}');
+      mq.latex('');
+      // Same validator as autoCommands.
+      assert.throws(function () {
+        MQ.config({ autoCommandsInSubscripts: 'e1' });
+      });
+      assert.throws(function () {
+        MQ.config({ autoCommandsInSubscripts: 'max' });
+      });
+      mq.config(normalConfig);
+    });
+
     suite('command list not perfectly space-delimited', function () {
       test('double space', function () {
         assert.throws(function () {

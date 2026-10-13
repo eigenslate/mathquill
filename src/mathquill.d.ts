@@ -127,6 +127,7 @@ declare namespace MathQuill {
       overrideKeystroke?: (key: string, event: KeyboardEvent) => void;
       autoOperatorNames?: string;
       autoCommands?: string;
+      autoCommandsInSubscripts?: string;
       autoParenthesizedFunctions?: string;
       quietEmptyDelimiters?: string;
       disableAutoSubstitutionInSubscripts?: boolean;
