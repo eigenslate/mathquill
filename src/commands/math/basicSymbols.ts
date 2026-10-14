@@ -298,7 +298,10 @@ baseOptionProcessors.autoCommands = function (cmds: string | undefined) {
       throw 'autocommand "' + cmd + '" not minimum length of 2';
     }
 
-    if (lookUpCmd(LatexCmds, cmd) === OperatorName) {
+    if (
+      lookUpCmd(LatexCmds, cmd) === OperatorName ||
+      hasOwn(LimitOperatorWords, cmd)
+    ) {
       throw '"' + cmd + '" is a built-in operator name';
     }
     dict[cmd] = 1;
@@ -461,7 +464,71 @@ class Letter extends Variable {
     super.createLeftOf(cursor);
 
     this.checkAutoCmds(cursor);
+    // A run that became a limit operator has no letters left to parenthesize.
+    if (this.checkLimitOperator(cursor)) return;
     this.autoParenthesize(cursor);
+  }
+
+  /**
+   * Convert the letter run ending at this (just typed) letter into a
+   * `LimitOperator` when its longest suffix that is an auto operator name is
+   * `lim`, `limsup` or `liminf`. The words are matched like `autoCommands`:
+   * suffixes ending at this letter, longest first, so `injlim` stays the
+   * operator name `injlim` while `xlim` becomes `x\lim`. A limit operator with
+   * an EMPTY under slot directly left of the run joins the match, which is how
+   * `lim` (already converted) followed by `sup` becomes `\limsup`. Skipped
+   * directly in a subscript while `disableAutoSubstitutionInSubscripts` is on,
+   * like every other letter-run substitution. App `spec/ux.md` §5.1 "Limits".
+   * @param cursor The cursor the letter was just created left of.
+   * @returns True if the run was replaced by a limit operator.
+   */
+  checkLimitOperator(cursor: Cursor): boolean {
+    // An autocommand already replaced this letter.
+    if (cursor[L] !== this) return false;
+    if (this.shouldIgnoreSubstitutionInSimpleSubscript(cursor.options)) {
+      return false;
+    }
+    var autoOps = cursor.options.autoOperatorNames;
+    var maxLength = autoOps._maxLength || 0;
+
+    // Collect the letter run ending here (op-name letters included: their
+    // ctrlSeq is decorated but `.letter` is not), plus an empty-slot limit
+    // operator directly left of it.
+    var nodes: MQNode[] = [];
+    var str = '';
+    var l: NodeRef = this;
+    while (l instanceof Letter && str.length < maxLength) {
+      str = l.letter + str;
+      nodes.unshift(l);
+      l = l[L];
+    }
+    if (l instanceof LimitOperator && l.getEnd(L).isEmpty()) {
+      str = l.word + str;
+      nodes.unshift(l);
+    }
+
+    // Longest suffix that is an auto operator name decides; only a limit
+    // word converts.
+    for (var start = 0; start < nodes.length; start += 1) {
+      var suffix = '';
+      for (var k = start; k < nodes.length; k += 1) {
+        var node = nodes[k];
+        suffix +=
+          node instanceof LimitOperator ? node.word : (node as Letter).letter;
+      }
+      if (suffix.length > maxLength || !hasOwn(autoOps, suffix)) continue;
+      if (!hasOwn(LimitOperatorWords, suffix)) return false;
+
+      new Fragment(nodes[start], this).remove();
+      cursor[L] = nodes[start][L];
+      var op = new LimitOperator(suffix);
+      op.createLeftOf(cursor);
+      // createLeftOf parks the caret in the empty under slot; typing the word
+      // leaves it right of the word instead, where `_` opens the slot.
+      cursor.insRightOf(op);
+      return true;
+    }
+    return false;
   }
   italicize(bool: boolean) {
     this.isItalic = bool;
@@ -531,7 +598,10 @@ class Letter extends Variable {
         var word = str.slice(i, i + len);
         var last: MQNode = undefined!; // TODO - TS complaining that we use last before assigning to it
 
-        if (hasOwn(autoOps, word)) {
+        // Limit words are never an operator-name letter run: typing converts
+        // them to a LimitOperator (checkLimitOperator), and letters that
+        // spell one by other means stay plain letters.
+        if (hasOwn(autoOps, word) && !hasOwn(LimitOperatorWords, word)) {
           for (
             var j = 0, letter: NodeRef = first;
             j < len;
@@ -600,6 +670,7 @@ class Letter extends Variable {
     if (node instanceof BinaryOperator) return true;
 
     if (node instanceof SummationNotation) return true;
+    if (node instanceof LimitOperator) return true;
 
     return false;
   }
@@ -614,7 +685,24 @@ var BuiltInOpNames: AutoDict = {}; // the set of operator names like \sin, \cos,
 // the set of operator names that MathQuill auto-unitalicizes by default; overridable
 Options.prototype.autoOperatorNames = defaultAutoOpNames();
 
-var TwoWordOpNames = { limsup: 1, liminf: 1, projlim: 1, injlim: 1 };
+var TwoWordOpNames = { projlim: 1, injlim: 1 };
+
+/**
+ * The limit words. Each is an auto operator name by default (and the host may
+ * list them in `autoOperatorNames`), but it is never an `OperatorName` letter
+ * run: `\lim`, `\limsup` and `\liminf` parse to, and typing the word
+ * converts to, a `LimitOperator` (commands.ts), which owns the under slot.
+ * `display` is the rendered word, `ariaLabel` its spoken name.
+ */
+var LimitOperatorWords: {
+  [word: string]: { display: string; ariaLabel: string };
+} = {
+  lim: { display: 'lim', ariaLabel: 'limit' },
+  // A word space between the two words; a thin space read as one word in
+  // Times New Roman.
+  limsup: { display: 'lim sup', ariaLabel: 'limit superior' },
+  liminf: { display: 'lim inf', ariaLabel: 'limit inferior' },
+};
 
 function defaultAutoOpNames() {
   const AutoOpNames: AutoDict = {
@@ -712,8 +800,12 @@ class OperatorName extends MQSymbol {
   }
 }
 
+// The limit words are registered as LimitOperator builders in commands.ts.
 for (var fn in Options.prototype.autoOperatorNames)
-  if (hasOwn(Options.prototype.autoOperatorNames, fn)) {
+  if (
+    hasOwn(Options.prototype.autoOperatorNames, fn) &&
+    !hasOwn(LimitOperatorWords, fn)
+  ) {
     (LatexCmds as LatexCmdsAny)[fn as string] = OperatorName;
   }
 

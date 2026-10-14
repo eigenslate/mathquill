@@ -5,6 +5,19 @@
     font-family: Symbola;
     .font-srcs;
   }
+  // \mathcal letters (.mq-script-letter): a subset of STIX Two Math holding
+  // only the Mathematical Script block and the eleven BMP script letters, so
+  // they render from a shipped face on every machine (Symbola is BMP-only).
+  // No local() source: a system copy could differ in version or style.
+  @font-face {
+    font-family: "MathQuill Script";
+    src:
+      url(fonts/MathQuillScript.woff2) format("woff2"),
+      url(fonts/MathQuillScript.woff) format("woff")
+    ;
+    unicode-range: U+1D49C-1D4CF, U+210A-210B, U+2110, U+2112, U+211B, U+212C,
+      U+212F-2131, U+2133-2134;
+  }
 }
 
 @basic:~"";

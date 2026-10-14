@@ -193,6 +193,14 @@
     font-family: monospace, Symbola, serif;
   }
 
+  // \mathcal letters (ScriptLetter): Unicode Mathematical Script glyphs,
+  // upright, from the shipped "MathQuill Script" subset (font.less) only, so
+  // they look the same everywhere; serif is a last resort for a failed load.
+  .mq-script-letter {
+    font-style: normal;
+    font-family: 'MathQuill Script', serif;
+  }
+
   .mq-overline {
     border-top: 1px solid;
     margin-top: 1px;
