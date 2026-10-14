@@ -193,6 +193,23 @@
     font-family: monospace, Symbola, serif;
   }
 
+  // \mathcal letters (ScriptLetter): Unicode Mathematical Script glyphs,
+  // upright. The vendored Symbola and Times New Roman carry only the BMP
+  // script letters (U+210B etc.), not the U+1D49C block, so the stack names
+  // the common system math fonts first; every glyph then comes from one face.
+  .mq-script-letter {
+    font-style: normal;
+    font-family:
+      'Cambria Math',
+      'STIX Two Math',
+      'STIX Two Text',
+      'Latin Modern Math',
+      'Noto Sans Math',
+      'Segoe UI Symbol',
+      Symbola,
+      serif;
+  }
+
   .mq-overline {
     border-top: 1px solid;
     margin-top: 1px;
@@ -566,6 +583,13 @@
     // floated out of flow).
     &.mq-word-operator {
       vertical-align: baseline;
+    }
+
+    // \lim / \limsup / \liminf (LimitOperator): the under slot is optional
+    // (bare \lim is valid), so an empty one is hidden; it shows once the
+    // caret enters it (focus drops .mq-empty).
+    &.mq-limit > .mq-from > .mq-empty {
+      display: none;
     }
 
     .mq-from,

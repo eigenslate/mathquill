@@ -172,6 +172,154 @@ LatexCmds.mathsf = () =>
   );
 LatexCmds.mathtt = () =>
   new Style('\\mathtt', 'span', { class: 'mq-monospace mq-font' }, 'Math Text');
+
+/**
+ * Mathematical Script letters that Unicode places in the Letterlike Symbols
+ * block (the U+1D49C block leaves holes for them), keyed by Latin letter.
+ */
+var SCRIPT_LETTER_BMP_CODES: { [letter: string]: number } = {
+  B: 0x212c,
+  E: 0x2130,
+  F: 0x2131,
+  H: 0x210b,
+  I: 0x2110,
+  L: 0x2112,
+  M: 0x2133,
+  R: 0x211b,
+  e: 0x212f,
+  g: 0x210a,
+  o: 0x2134,
+};
+
+/**
+ * Whether `ch` is a single Latin letter, the only characters `\mathcal`
+ * turns into script glyphs.
+ * @param ch The character to test.
+ * @returns True for A-Z and a-z.
+ */
+function isLatinLetter(ch: string): boolean {
+  return /^[A-Za-z]$/.test(ch);
+}
+
+/**
+ * The Unicode Mathematical Script glyph for a Latin letter: U+1D49C + n for
+ * capitals, U+1D4B6 + n for lower case, except the letters Unicode encodes
+ * in the BMP (SCRIPT_LETTER_BMP_CODES).
+ * @param letter A single Latin letter (see isLatinLetter).
+ * @returns The glyph as a JS string (a surrogate pair outside the BMP).
+ */
+function scriptLetterGlyph(letter: string): string {
+  if (hasOwn(SCRIPT_LETTER_BMP_CODES, letter)) {
+    return String.fromCharCode(SCRIPT_LETTER_BMP_CODES[letter]);
+  }
+  var code = letter.charCodeAt(0);
+  var codePoint = code <= 90 ? 0x1d49c + (code - 65) : 0x1d4b6 + (code - 97);
+  // ES5 has no String.fromCodePoint: build the UTF-16 surrogate pair.
+  var offset = codePoint - 0x10000;
+  return String.fromCharCode(
+    0xd800 + (offset >> 10),
+    0xdc00 + (offset & 0x3ff)
+  );
+}
+
+/**
+ * A Latin letter inside `\mathcal{...}`: renders the script glyph, serialises
+ * as the plain letter (the enclosing Calligraphic writes the `\mathcal{}`).
+ * Upright, and not a Letter, so operator-name, autocommand and
+ * auto-subscript logic never touch it.
+ */
+class ScriptLetter extends MQSymbol {
+  letter: string;
+
+  /**
+   * @param letter A single Latin letter (see isLatinLetter).
+   */
+  constructor(letter: string) {
+    super(
+      letter,
+      h('span', { class: 'mq-script-letter' }, [
+        h.text(scriptLetterGlyph(letter)),
+      ]),
+      letter,
+      'script ' + letter
+    );
+    this.letter = letter;
+  }
+}
+
+/**
+ * The slot of `\mathcal`: a Latin letter typed into it becomes a
+ * ScriptLetter; every other character types as it would anywhere else.
+ */
+class ScriptLetterBlock extends MathBlock {
+  /**
+   * Build the node for a typed character.
+   * @param ch The typed character.
+   * @param options The cursor options.
+   * @returns A ScriptLetter for a Latin letter, else MathBlock's node.
+   */
+  chToCmd(ch: string, options: CursorOptions) {
+    if (isLatinLetter(ch)) return new ScriptLetter(ch);
+    return super.chToCmd(ch, options);
+  }
+}
+
+/**
+ * `\mathcal{X}`: calligraphic (mathematical script) letters. Display only;
+ * the calc engine refuses the command. Latin letters directly in the slot are
+ * ScriptLetters, whether parsed or typed; anything else stays as it is.
+ * App `spec/ux.md` §5.1 "Calligraphic letters".
+ */
+class Calligraphic extends MathCommand {
+  constructor() {
+    super(
+      '\\mathcal',
+      new DOMView(1, (blocks) =>
+        h.block('span', { class: 'mq-mathcal mq-non-leaf' }, blocks[0])
+      )
+    );
+    this.ariaLabel = 'Calligraphic';
+    this.mathspeakTemplate = ['StartCalligraphic,', 'EndCalligraphic'];
+  }
+
+  /**
+   * Create the single slot as a ScriptLetterBlock (typing path).
+   * @returns Nothing; sets `this.blocks`.
+   */
+  createBlocks() {
+    var block = new ScriptLetterBlock();
+    this.blocks = [block];
+    block.adopt(this, this.getEnd(R), 0);
+  }
+
+  /**
+   * Parse the argument group, then move its children into a
+   * ScriptLetterBlock, swapping each Latin Letter for a ScriptLetter. Runs
+   * before any DOM exists, so it is a pure tree rewrite.
+   * @returns A parser yielding this command.
+   */
+  parser(): Parser<MQNode | Fragment> {
+    return latexMathParser.block.map((parsed) => {
+      var block = new ScriptLetterBlock();
+      var children: MQNode[] = [];
+      for (var child = parsed.getEnd(L); child; child = child[R]) {
+        children.push(child);
+      }
+      for (var i = 0; i < children.length; i += 1) {
+        var node = children[i];
+        node.disown();
+        if (node instanceof Letter && isLatinLetter(node.letter)) {
+          node = new ScriptLetter(node.letter);
+        }
+        node.adopt(block, block.getEnd(R), 0);
+      }
+      this.blocks = [block];
+      block.adopt(this, this.getEnd(R), 0);
+      return this;
+    });
+  }
+}
+LatexCmds.mathcal = Calligraphic;
 //text-decoration
 LatexCmds.underline = () =>
   new Style(
@@ -645,6 +793,23 @@ class SubscriptCommand extends SupSub {
 
   ariaLabel = 'subscript';
 
+  /**
+   * `_` typed straight after a limit operator (caret just right of it, no
+   * selection) enters the operator's under slot instead of starting a
+   * subscript: the limit's subscript IS that slot (app `spec/ux.md` §5.1
+   * "Limits").
+   * @param cursor The cursor to create this subscript left of.
+   * @returns Nothing.
+   */
+  createLeftOf(cursor: Cursor) {
+    var left = cursor[L];
+    if (!this.replacedFragment && left instanceof LimitOperator) {
+      cursor.insAtRightEnd(left.getEnd(L));
+      return;
+    }
+    super.createLeftOf(cursor);
+  }
+
   finalizeTree() {
     this.downInto = this.sub = this.getEnd(L);
     this.sub.upOutOf = insLeftOfMeUnlessAtEnd;
@@ -863,6 +1028,110 @@ LatexCmds['∫'] =
         MathCommand.prototype.createLeftOf.call(this, cursor);
       }
     };
+/**
+ * `\lim`, `\limsup`, `\liminf`: an upright operator word with ONE slot, the
+ * limit, set under the word like a sum's lower limit (the large-operator
+ * layout without the upper slot). Stored as `\lim_{...}`; an empty slot
+ * serialises as bare `\lim`. There is no upper slot. Typing the word converts
+ * to this command (Letter.checkLimitOperator), and `_` straight after it
+ * enters the slot (SubscriptCommand.createLeftOf). App `spec/ux.md` §5.1
+ * "Limits".
+ */
+class LimitOperator extends MathCommand {
+  word: string;
+
+  /**
+   * @param word `lim`, `limsup` or `liminf` (a key of LimitOperatorWords).
+   */
+  constructor(word: string) {
+    super('\\' + word);
+    var entry = LimitOperatorWords[word];
+    pray('LimitOperator word is a limit word', entry);
+    this.word = word;
+    this.ariaLabel = entry.ariaLabel;
+    this.domView = new DOMView(1, (blocks) =>
+      h(
+        'span',
+        { class: 'mq-large-operator mq-word-operator mq-limit mq-non-leaf' },
+        [
+          h('span', { class: 'mq-operator-name', style: 'display:block' }, [
+            h.text(entry.display),
+          ]),
+          h('span', { class: 'mq-from' }, [h.block('span', {}, blocks[0])]),
+        ]
+      )
+    );
+  }
+
+  /**
+   * @returns `\word_{limit}`, or `\word ` (trailing space, trimmed by
+   *   cleanLatex unless a letter follows) when the slot is empty.
+   */
+  latex() {
+    var under = this.getEnd(L).latex();
+    return under ? this.ctrlSeq + '_{' + under + '}' : this.ctrlSeq + ' ';
+  }
+
+  /**
+   * @returns The word, followed by `_(limit)` when the slot is filled.
+   */
+  text() {
+    var under = this.getEnd(L).text();
+    return this.word + (under ? '_(' + under + ')' : '');
+  }
+
+  /**
+   * @returns The spoken word, with the limit when the slot is filled.
+   */
+  mathspeak() {
+    var under = this.getEnd(L);
+    if (under.isEmpty()) return this.ariaLabel + ' ';
+    return (
+      'Start ' +
+      this.ariaLabel +
+      ' under ' +
+      under.mathspeak() +
+      ', end ' +
+      this.ariaLabel +
+      ', '
+    );
+  }
+
+  /**
+   * Parse an optional `_` group after the command word: `\lim`,
+   * `\lim_{x\to 0}` and `\lim_x` all parse; a `^` after it is left to the
+   * enclosing parse (an ordinary superscript).
+   * @returns A parser yielding this command.
+   */
+  parser(): Parser<MQNode | Fragment> {
+    var block = new MathBlock();
+    this.blocks = [block];
+    block.adopt(this, this.getEnd(R), 0);
+    return Parser.optWhitespace
+      .then(Parser.string('_'))
+      .then(latexMathParser.block)
+      .map((parsed) => {
+        parsed.children().adopt(block, block.getEnd(R), 0);
+        return this;
+      })
+      .or(Parser.succeed(this));
+  }
+
+  /**
+   * Label the slot for speech and make Down enter it.
+   * @returns Nothing.
+   */
+  finalizeTree() {
+    var under = this.getEnd(L);
+    under.ariaLabel = 'limit';
+    this.downInto = under;
+  }
+}
+
+LatexCmds.lim = () => new LimitOperator('lim');
+LatexCmds.limsup = () => new LimitOperator('limsup');
+LatexCmds.liminf = () => new LimitOperator('liminf');
+
 var Fraction =
   (LatexCmds.frac =
   LatexCmds.dfrac =
