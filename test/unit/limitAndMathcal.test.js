@@ -116,6 +116,21 @@ suite('limit operator', function () {
     assert.equal(mq.latex(), '');
   });
 
+  test('an empty limit slot shows the empty-block box, like a sum', function () {
+    mq.latex('\\lim');
+    var slot = rootLimits()[0].getEnd(L).domFrag().oneElement();
+    assert.ok(slot.classList.contains('mq-empty'));
+    assert.ok(getComputedStyle(slot).display !== 'none');
+    assert.ok(slot.offsetWidth > 0 && slot.offsetHeight > 0);
+    // Same box as a sum's empty lower limit.
+    var limBox = slot.getBoundingClientRect();
+    mq.latex('\\sum');
+    var sumSlot = mq.el().querySelector('.mq-from .mq-empty');
+    var sumBox = sumSlot.getBoundingClientRect();
+    assert.equal(Math.round(limBox.width), Math.round(sumBox.width));
+    assert.equal(Math.round(limBox.height), Math.round(sumBox.height));
+  });
+
   test('^ after the limit is an ordinary superscript', function () {
     mq.typedText('lim^2');
     assert.equal(mq.latex(), '\\lim^{2}');
@@ -171,6 +186,24 @@ suite('mathcal', function () {
     );
     mq.latex('\\mathcal L');
     assert.equal(mq.latex(), '\\mathcal{L}');
+  });
+
+  test('script glyphs come from the shipped MathQuill Script face', function () {
+    mq.latex('\\mathcal{AL}');
+    var el = mq.el().querySelector('.mq-script-letter');
+    assert.equal(
+      getComputedStyle(el).fontFamily.split(',')[0].replace(/["']/g, ''),
+      'MathQuill Script'
+    );
+    var probe =
+      String.fromCharCode(0xd835, 0xdc9c) + String.fromCharCode(0x2112);
+    return document.fonts
+      .load('1em "MathQuill Script"', probe)
+      .then(function (faces) {
+        assert.equal(faces.length, 1);
+        assert.equal(faces[0].status, 'loaded');
+        assert.ok(document.fonts.check('1em "MathQuill Script"', probe));
+      });
   });
 
   test('loading it never empties the field', function () {
